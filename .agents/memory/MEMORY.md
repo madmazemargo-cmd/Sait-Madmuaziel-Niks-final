@@ -1,0 +1,2 @@
+- [Cloudflare Worker source](cloudflare-worker-source.md) — Dashboard may expose only the deployed bundle; prefer the original repo or rebuild an editable copy.
+- [Live calendar source](calendar-source.md) — Cloudflare is the source of truth; public dates must be fresh and never hardcoded.

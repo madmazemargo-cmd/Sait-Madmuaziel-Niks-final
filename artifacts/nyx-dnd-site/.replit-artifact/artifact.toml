@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Мадмуазель Никс"
+description = "Редактируемая версия сайта мастера настольных ролевых игр: каталог игр, календарь открытых столов, анкета подбора и путь записи для новичков и опытных игроков."
+version = "1.0.0"
+id = "artifacts/nyx-dnd-site"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21919
+
+[services.development]
+run = "pnpm --filter @workspace/nyx-dnd-site run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/nyx-dnd-site", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/nyx-dnd-site/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21919"
+BASE_PATH = "/"
+
+# Required for production API proxying; override with the public API origin when needed.
+# API_PROXY_URL = "https://api.example.com"

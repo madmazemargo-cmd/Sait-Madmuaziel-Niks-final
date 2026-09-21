@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://dndmaster.dndmaster.workers.dev/sitemap.xml

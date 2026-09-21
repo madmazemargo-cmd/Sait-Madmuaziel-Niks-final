@@ -1,0 +1,318 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: calendar
+    description: Public game calendar
+  - name: applications
+    description: Game applications
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /calendar:
+    get:
+      operationId: getCalendar
+      tags: [calendar]
+      summary: Get the live game calendar
+      description: Returns current published events from the connected calendar source.
+      responses:
+        "200":
+          description: Calendar events
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarResponse"
+        "502":
+          description: Calendar source unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /applications:
+    get:
+      operationId: getApplicationSelection
+      tags: [applications]
+      summary: Validate a selected game occurrence
+      parameters:
+        - name: event
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+      responses:
+        "200":
+          description: Current game conditions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplicationSelectionResponse"
+        "400":
+          description: Invalid selection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Application source unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: submitApplication
+      tags: [applications]
+      summary: Send an application to the game master
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplicationInput"
+      responses:
+        "200":
+          description: Application accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplicationResponse"
+        "400":
+          description: Application rejected or selected conditions changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplicationResponse"
+        "502":
+          description: Application source unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    CalendarEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        eventDate:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        startTime:
+          type: string
+        status:
+          type: string
+        seats:
+          type: ["integer", "null"]
+        description:
+          type: string
+        system:
+          type: string
+        format:
+          type: string
+        location:
+          type: string
+        duration:
+          type: string
+        price:
+          type: string
+        experience:
+          type: string
+        age:
+          type: string
+        playerPrep:
+          type: string
+        archived:
+          type: boolean
+        applicationUrl:
+          type: string
+        recurrence:
+          type: string
+        excludedDates:
+          type: array
+          items:
+            type: string
+      required:
+        - id
+        - title
+        - eventDate
+        - startTime
+        - status
+        - seats
+        - description
+        - system
+        - format
+        - location
+        - duration
+        - price
+        - experience
+        - age
+        - playerPrep
+        - archived
+        - applicationUrl
+        - recurrence
+        - excludedDates
+    CalendarResponse:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/CalendarEvent"
+      required:
+        - events
+    GameSelection:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        date:
+          type: string
+        dateLabel:
+          type: string
+        time:
+          type: string
+        status:
+          type: string
+        price:
+          type: string
+        place:
+          type: string
+        location:
+          type: string
+        preparation:
+          type: string
+        revision:
+          type: string
+      required:
+        - id
+        - title
+        - date
+        - dateLabel
+        - time
+        - status
+        - price
+        - place
+        - location
+        - preparation
+        - revision
+    ApplicationSelectionResponse:
+      type: object
+      properties:
+        game:
+          $ref: "#/components/schemas/GameSelection"
+      required:
+        - game
+    ApplicationInput:
+      type: object
+      properties:
+        submissionId:
+          type: string
+        name:
+          type: string
+        contact:
+          type: string
+        players:
+          type: integer
+          minimum: 1
+          maximum: 20
+        format:
+          type: string
+        place:
+          type: string
+        experience:
+          type: string
+        system:
+          type: string
+        genres:
+          type: string
+        tone:
+          type: string
+        wishes:
+          type: string
+        schedule:
+          type: string
+        boundaries:
+          type: string
+        website:
+          type: string
+        consent:
+          type: boolean
+        eventId:
+          type: ["string", "null"]
+        occurrenceDate:
+          type: ["string", "null"]
+        eventRevision:
+          type: ["string", "null"]
+      required:
+        - submissionId
+        - name
+        - contact
+        - players
+        - format
+        - place
+        - consent
+    ApplicationResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        error:
+          type: ["string", "null"]
+        notice:
+          type: ["string", "null"]
+        selectionChanged:
+          type: ["boolean", "null"]
+        game:
+          anyOf:
+            - $ref: "#/components/schemas/GameSelection"
+            - type: "null"
+      required:
+        - ok
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+

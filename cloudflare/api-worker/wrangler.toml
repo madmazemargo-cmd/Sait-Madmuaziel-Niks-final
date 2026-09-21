@@ -1,0 +1,19 @@
+name = "madmuazelle-niks-api"
+main = "src/index.ts"
+compatibility_date = "2026-09-20"
+
+[vars]
+# Replace with the exact Pages URL after the project is created.
+ALLOWED_ORIGIN = "https://madmazemargo.pages.dev"
+# Optional: set these in the Cloudflare dashboard or with `wrangler secret put`.
+# CALENDAR_SOURCE_URL = "https://dndmaster.dndmaster.workers.dev/api/calendar"
+# APPLICATIONS_SOURCE_URL = "https://dndmaster.dndmaster.workers.dev/api/applications"
+
+[durable_objects]
+bindings = [
+  { name = "RATE_LIMITER", class_name = "RateLimiter" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RateLimiter"]
