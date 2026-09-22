@@ -107,6 +107,20 @@ function formatWeekRange(start: string) {
   return `${formatter.format(parseDateKey(start))} — ${formatter.format(parseDateKey(end))}`;
 }
 
+function startOfMonth(value: string) {
+  const date = parseDateKey(value);
+  date.setUTCDate(1);
+  return dateKeyFromDate(date);
+}
+
+function monthGridStart(value: string) {
+  return startOfWeek(startOfMonth(value));
+}
+
+function monthLabel(value: string) {
+  return new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(parseDateKey(value));
+}
+
 function formatSpots(seats: number | null) {
   if (seats === null) return 'Места уточняются';
   if (seats === 0) return 'Мест нет';
@@ -564,6 +578,8 @@ function CalendarPage() {
   const today = todayInMoscow();
   const hasPublishedEvents = events.some((event) => !event.archived);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(today));
+  const [monthStart, setMonthStart] = useState(() => startOfMonth(today));
+  const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
   const [formatFilter, setFormatFilter] = useState('all');
   const [storyFilter, setStoryFilter] = useState('all');
   const [beginnersOnly, setBeginnersOnly] = useState(false);
@@ -581,10 +597,34 @@ function CalendarPage() {
     const date = addDays(weekStart, index);
     return { date, label: weekDayLabels[index], name: formatDayName(date), games: weekGames.filter((game) => game.dateISO === date) };
   }), [weekGames, weekStart]);
-  const scheduledCount = weekGames.filter((game) => !calendarOnlyStatuses.has(game.status)).length;
+  const monthGrid = useMemo(() => {
+    const gridStart = monthGridStart(monthStart);
+    const gridEnd = addDays(gridStart, 41);
+    const games = expandEvents(events, gridStart, gridEnd).filter((game) => {
+      const normalizedFormat = game.format.toLowerCase();
+      const experience = game.experience.toLowerCase();
+      const formatMatches = formatFilter === 'all' || (formatFilter === 'online' ? normalizedFormat.includes('online') : normalizedFormat.includes('offline'));
+      const storyMatches = storyFilter === 'all' || game.storyType === storyFilter;
+      const beginnerMatches = !beginnersOnly || !experience || /нович|любой|начин/.test(experience);
+      return formatMatches && storyMatches && beginnerMatches;
+    });
+    return Array.from({ length: 42 }, (_, index) => {
+      const date = addDays(gridStart, index);
+      return { date, label: weekDayLabels[index % 7], games: games.filter((game) => game.dateISO === date) };
+    });
+  }, [beginnersOnly, events, formatFilter, monthStart, storyFilter]);
+  const scheduledCount = (calendarView === 'week' ? weekGames : monthGrid.flatMap((day) => day.games)).filter((game) => !calendarOnlyStatuses.has(game.status)).length;
 
   function moveWeek(offset: number) {
     setWeekStart((current) => addDays(current, offset * 7));
+  }
+
+  function moveMonth(offset: number) {
+    setMonthStart((current) => {
+      const date = parseDateKey(current);
+      date.setUTCMonth(date.getUTCMonth() + offset);
+      return startOfMonth(dateKeyFromDate(date));
+    });
   }
 
   return (
@@ -604,25 +644,31 @@ function CalendarPage() {
         {!isLoading && !isError && !hasPublishedEvents && !upcomingGames.length && <div className="calendar-state"><h2>Ближайших игр пока нет</h2><p>Оставьте заявку — я помогу подобрать формат и дату под вашу компанию.</p><Link href="/anketa" className="button button-primary">Оставить заявку <ArrowUpRight size={15} /></Link></div>}
         {!isLoading && !isError && (hasPublishedEvents || upcomingGames.length > 0) && <section className="calendar-week" aria-labelledby="calendar-week-title">
           <div className="calendar-week-toolbar">
-            <div><h2 id="calendar-week-title">Расписание на неделю</h2><p>Время московское · открытые наборы и ближайшие встречи</p></div>
-            <div className="calendar-week-nav" aria-label="Навигация по неделям">
-              <button type="button" onClick={() => moveWeek(-1)} aria-label="Предыдущая неделя">←</button>
-              <button type="button" className="calendar-week-current" onClick={() => setWeekStart(startOfWeek(today))}>Эта неделя</button>
-              <button type="button" onClick={() => moveWeek(1)} aria-label="Следующая неделя">→</button>
+            <div><h2 id="calendar-week-title">Расписание на {calendarView === 'week' ? 'неделю' : 'месяц'}</h2><p>Время московское · открытые наборы и ближайшие встречи</p></div>
+              <div className="calendar-week-nav" aria-label="Навигация по расписанию">
+              <button type="button" onClick={() => calendarView === 'week' ? moveWeek(-1) : moveMonth(-1)} aria-label="Назад">←</button>
+              <button type="button" className="calendar-week-current" onClick={() => { setWeekStart(startOfWeek(today)); setMonthStart(startOfMonth(today)); }}>Сегодня</button>
+              <button type="button" onClick={() => calendarView === 'week' ? moveWeek(1) : moveMonth(1)} aria-label="Вперёд">→</button>
             </div>
           </div>
-          <div className="calendar-week-meta"><span>{formatWeekRange(weekStart)}</span><strong>В расписании: {scheduledCount}</strong></div>
+          <div className="calendar-week-meta"><span>{calendarView === 'week' ? formatWeekRange(weekStart) : monthLabel(monthStart)}</span><strong>В расписании: {scheduledCount}</strong></div>
+          <div className="calendar-view-switch" role="group" aria-label="Вид расписания"><button type="button" className={calendarView === 'week' ? 'is-active' : ''} onClick={() => setCalendarView('week')}>Неделя</button><button type="button" className={calendarView === 'month' ? 'is-active' : ''} onClick={() => setCalendarView('month')}>Месяц</button></div>
           <div className="calendar-filters">
             <label><span>Где играем</span><select value={formatFilter} onChange={(event) => setFormatFilter(event.target.value)}><option value="all">Любой формат</option><option value="online">Онлайн</option><option value="offline">Очно в Москве</option></select></label>
             <label><span>Длина истории</span><select value={storyFilter} onChange={(event) => setStoryFilter(event.target.value)}><option value="all">Ваншоты и кампании</option><option value="oneshot">Ваншот — одна встреча</option><option value="campaign">Кампания — серия встреч</option></select></label>
             <label className="calendar-check"><input type="checkbox" checked={beginnersOnly} onChange={(event) => setBeginnersOnly(event.target.checked)} /><span>Подходит новичкам</span></label>
           </div>
-          <div className="calendar-week-grid">
+          {calendarView === 'week' ? <div className="calendar-week-grid">
             {weekDays.map((day) => <section className={`calendar-day${day.date === today ? ' is-today' : ''}${day.date < today ? ' is-past' : ''}`} key={day.date} aria-labelledby={`calendar-day-${day.date}`}>
               <header className="calendar-day-head"><div><span>{day.label}</span><strong>{parseDateKey(day.date).getUTCDate()}</strong></div><small id={`calendar-day-${day.date}`}>{day.name}</small></header>
               <div className="calendar-day-body">{day.games.length ? day.games.map((game) => <WeeklyGame game={game} key={game.id} />) : <p className="calendar-day-empty">Свободный день</p>}</div>
             </section>)}
-          </div>
+          </div> : <div className="calendar-month-grid">
+            {monthGrid.map((day) => <section className={`calendar-month-day${day.date.slice(0, 7) !== monthStart.slice(0, 7) ? ' is-outside' : ''}${day.date === today ? ' is-today' : ''}`} key={day.date}>
+              <header><span>{day.label}</span><strong>{parseDateKey(day.date).getUTCDate()}</strong></header>
+              <div>{day.games.map((game) => <WeeklyGame game={game} key={game.id} />)}</div>
+            </section>)}
+          </div>}
         </section>}
       </main>
     </Shell>

@@ -353,6 +353,22 @@
 .calendar-week-toolbar p { color: #a696a9; font-family: var(--app-font-mono); font-size: 11px; margin: 0; }
 .calendar-week-meta { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 0 16px; color: #a696a9; font: 10px/1.4 var(--app-font-mono); text-transform: uppercase; letter-spacing: .06em; }
 .calendar-week-meta strong { color: #d8ff55; font-weight: 700; }
+.calendar-view-switch { display: inline-flex; gap: 0; margin: 0 0 18px; border: 1px solid #5a465f; }
+.calendar-view-switch button { border: 0; border-right: 1px solid #5a465f; background: transparent; color: #a696a9; padding: 10px 18px; font: 11px var(--app-font-sans); cursor: pointer; }
+.calendar-view-switch button:last-child { border-right: 0; }
+.calendar-view-switch button:hover, .calendar-view-switch button:focus-visible { color: #d8ff55; outline: none; }
+.calendar-view-switch button.is-active { color: #19101f; background: #d8ff55; font-weight: 800; }
+.calendar-month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-top: 1px solid #44344a; border-left: 1px solid #44344a; }
+.calendar-month-day { min-height: 150px; min-width: 0; background: #211728; border-right: 1px solid #44344a; border-bottom: 1px solid #44344a; }
+.calendar-month-day.is-outside { opacity: .42; }
+.calendar-month-day.is-today { box-shadow: inset 0 3px 0 #d8ff55; }
+.calendar-month-day > header { display: flex; align-items: baseline; justify-content: space-between; padding: 9px 10px; background: #292035; border-bottom: 1px solid #44344a; }
+.calendar-month-day > header span { color: #ff716a; font: 9px var(--app-font-mono); }
+.calendar-month-day > header strong { color: #f5eddc; font: 22px var(--app-font-serif); }
+.calendar-month-day > div { display: grid; gap: 5px; padding: 6px; }
+.calendar-month-day .calendar-event { padding: 7px; gap: 4px; }
+.calendar-month-day .calendar-event h3 { font-size: 14px; }
+.calendar-month-day .calendar-event p, .calendar-month-day .calendar-event small, .calendar-month-day .calendar-event-action { display: none; }
 .calendar-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
 .calendar-filters label { display: grid; gap: 7px; color: #a696a9; font: 9px/1.2 var(--app-font-mono); text-transform: uppercase; letter-spacing: .06em; }
 .calendar-filters select { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid #5a465f; background: #1f1526; color: #f5eddc; padding: 12px 13px; outline: none; font-size: 11px; text-transform: none; letter-spacing: 0; }
@@ -533,6 +549,8 @@
   .calendar-week-nav button { flex: 1; }
   .calendar-week-nav .calendar-week-current { flex: 2; }
   .calendar-week-grid { grid-template-columns: 1fr; }
+  .calendar-month-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .calendar-month-day { min-height: 120px; }
   .calendar-day-head { min-height: 0; display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 8px; padding: 11px 12px; }
   .calendar-day-head > div { justify-content: flex-start; gap: 7px; }
   .calendar-day-head strong { font-size: 23px; }
