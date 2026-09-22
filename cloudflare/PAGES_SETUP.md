@@ -4,7 +4,7 @@
 
 ## 1. Создайте Pages-проект
 
-В Cloudflare откройте **Workers & Pages → Create application → Pages → Connect to Git** и выберите репозиторий `madmazemargo-cmd/Sait-Madmuaziel-Niks-new`.
+В Cloudflare откройте **Workers & Pages → Create application → Pages → Connect to Git** и выберите репозиторий `madmazemargo-cmd/Sait-Madmuaziel-Niks-final`.
 
 Параметры сборки:
 
@@ -13,11 +13,11 @@
 - Build output directory: `artifacts/nyx-dnd-site/dist/public`;
 - Root directory: `/`;
 - Environment variable `BASE_PATH`: `/`;
-- Environment variable `VITE_API_BASE_URL`: URL опубликованного API Worker, например `https://madmuazelle-niks-api.<account>.workers.dev`.
+- `VITE_API_BASE_URL` для Pages не нужен: календарь, каталог и заявки проксируются однодоменной Pages Function из `/functions/api/[[path]].js`.
 
-После первого деплоя Cloudflare выдаст бесплатный адрес вида `https://<project>.pages.dev`. Этот адрес нужно указать в `cloudflare/api-worker/wrangler.toml` в переменной `ALLOWED_ORIGIN`, затем повторно развернуть Worker.
+После деплоя Cloudflare выдаст адрес вида `https://<project>.pages.dev`. Pages Function работает на том же адресе, поэтому отдельная настройка CORS для фронтенда не нужна.
 
-## 2. Разверните API Worker
+## 2. Отдельный API Worker (необязательно)
 
 Установите Node.js 22+ и выполните из папки `cloudflare/api-worker`:
 
@@ -43,7 +43,7 @@ curl https://<worker>.workers.dev/api/calendar
 
 ## 4. Проверьте Pages
 
-Откройте Pages URL и проверьте главную страницу, `/games`, `/calendar` и `/anketa`. В DevTools → Network запросы должны идти к `VITE_API_BASE_URL` с путями `/api/calendar` и `/api/applications`.
+Откройте Pages URL и проверьте главную страницу, `/games`, `/calendar` и `/anketa`. В DevTools → Network запросы должны идти на тот же Pages-домен по путям `/api/calendar`, `/api/catalog` и `/api/applications` и возвращать JSON, а не HTML-страницу.
 
 ## 5. Домен позже
 

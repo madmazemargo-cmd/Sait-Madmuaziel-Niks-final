@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { ArrowUpRight, CalendarDays, Check, Clock3, Menu, Video, X } from 'lucide-react';
 import { Link, Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
 import {
@@ -121,10 +121,10 @@ function formatPlace(event: CalendarEvent) {
 
 function eventImage(event: CalendarEvent) {
   const source = `${event.system} ${event.title}`.toLowerCase();
-  if (source.includes('vampire') || source.includes('вампир')) return '/assets/campaign-vampires.webp';
-  if (source.includes('dagger')) return '/assets/campaign-daggerheart.webp';
-  if (source.includes('cyber')) return '/assets/campaign-cyberpunk.webp';
-  return '/assets/online-tomb.png';
+  if (source.includes('vampire') || source.includes('вампир')) return '/assets/system-vampires.png';
+  if (source.includes('dagger')) return '/assets/system-daggerheart.png';
+  if (source.includes('cyber')) return '/assets/system-cyberpunk.png';
+  return '/assets/system-dnd.png';
 }
 
 function eventOccursOn(event: CalendarEvent, date: string) {
@@ -257,47 +257,79 @@ function Shell({ children }: { children: ReactNode }) {
   );
 }
 
-type CatalogGroup = {
+type CatalogSystem = {
   number: string;
   slug: string;
-  system: string;
+  title: string;
   subtitle: string;
   status: string;
+  artwork: string;
 };
 
-const catalogGroups: CatalogGroup[] = [
-  { number: '01', slug: 'dnd', system: 'ДНД', subtitle: 'Dungeons & Dragons 5e', status: 'Открыто' },
-  { number: '02', slug: 'daggerheart', system: 'DAGGERHEART', subtitle: 'Daggerheart', status: 'Новый набор' },
-  { number: '03', slug: 'vampires', system: 'ВАМПИРЫ', subtitle: 'Мир Тьмы', status: 'Новый набор' },
-  { number: '04', slug: 'cyberpunk', system: 'CYBERPUNK', subtitle: 'Cyberpunk 2020', status: 'Новый набор' },
+const catalogGroups: CatalogSystem[] = [
+  { number: '01', slug: 'vampires', title: 'Вампиры: Маскарад', subtitle: 'Vampire: The Masquerade', status: 'Готический хоррор', artwork: '/assets/system-vampires.png' },
+  { number: '02', slug: 'cthulhu', title: 'Зов Ктулху', subtitle: 'Call of Cthulhu', status: 'В разработке', artwork: '/assets/system-cthulhu.png' },
+  { number: '03', slug: 'daggerheart', title: 'Daggerheart', subtitle: 'Героическое фэнтези', status: 'Игры и кампании', artwork: '/assets/system-daggerheart.png' },
+  { number: '04', slug: 'dnd', title: 'Dungeons & Dragons', subtitle: 'D&D 5e', status: 'Ваншоты и кампании', artwork: '/assets/system-dnd.png' },
+  { number: '05', slug: 'cyberpunk', title: 'Cyberpunk 2020', subtitle: 'Тёмное будущее', status: 'Игры и кампании', artwork: '/assets/system-cyberpunk.png' },
 ];
 
-const catalogArtwork: Record<string, string> = {
-  dnd: '/assets/campaign-dnd.webp',
-  daggerheart: '/assets/campaign-daggerheart.webp',
-  vampires: '/assets/campaign-vampires.webp',
-  cyberpunk: '/assets/campaign-cyberpunk.webp',
+type CatalogItem = {
+  id: string;
+  gameType: 'campaign' | 'oneshot';
+  systemKey: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  status: string;
+  price: string;
+  format: string;
+  sortOrder: number;
+  published: boolean;
+  updatedAt: string;
 };
 
-function CatalogKind({ title, kicker, description, selectedSystem }: { title: string; kicker: string; description: string; selectedSystem?: string }) {
-  const visibleGroups = selectedSystem ? catalogGroups.filter((group) => group.slug === selectedSystem) : catalogGroups;
+type CatalogResponse = { items: CatalogItem[] };
 
+const MASTER_SITE = 'https://dndmaster.dndmaster.workers.dev';
+
+function useCatalog() {
+  return useQuery({
+    queryKey: ['/api/catalog'],
+    queryFn: async () => {
+      const response = await fetch('/api/catalog', { cache: 'no-store', headers: { Accept: 'application/json' } });
+      if (!response.ok) throw new Error('Не удалось загрузить каталог.');
+      const payload = await response.json() as Partial<CatalogResponse>;
+      if (!Array.isArray(payload.items)) throw new Error('Каталог вернул неверные данные.');
+      return { items: payload.items };
+    },
+    staleTime: 0,
+    refetchOnMount: true,
+  });
+}
+
+function SystemShowcase({ selectedSystem }: { selectedSystem?: string }) {
   return (
     <section className="catalog-kind" aria-labelledby="catalog-systems-title">
       <div className="catalog-kind-heading">
-        <div><span className="catalog-kicker">{kicker}</span><h3 id="catalog-systems-title">{title}</h3></div>
-        <p>{description}</p>
+        <div><span className="catalog-kicker">СИСТЕМЫ</span><h3 id="catalog-systems-title">Выберите мир</h3></div>
+        <p>Нажми на обложку, чтобы открыть игры в этой системе.</p>
       </div>
-      {selectedSystem && <div className="catalog-filter-status"><span>Показана выбранная система</span><Link href="/games">Показать все</Link></div>}
-      <div className={`catalog-system-grid${visibleGroups.length === 1 ? ' is-filtered' : ''}`}>
-        {visibleGroups.map((group) => (
-          <div key={group.slug} className="catalog-system">
-            <Link className="catalog-system-link" href={`/games?system=${group.slug}`} aria-label={`Открыть все игры: ${group.subtitle}`}>
-              <header className="catalog-system-head"><span className="catalog-system-number">{group.number}</span><div><h4>{group.subtitle}</h4></div></header>
-            </Link>
-            <div className="catalog-entries"><div className="catalog-entry"><div className="catalog-entry-art"><img src={catalogArtwork[group.slug]} alt={`Обложка ${group.subtitle}`} loading="lazy" decoding="async" /></div><span className="catalog-entry-label">{group.status}</span></div></div>
-            <Link className="catalog-link" href={`/games?system=${group.slug}`}>Посмотреть всё <ArrowUpRight size={14} /></Link>
-          </div>
+      {selectedSystem && <div className="catalog-filter-status"><span>Выбрана система: {catalogGroups.find((group) => group.slug === selectedSystem)?.title}</span><Link href="/games">Показать все</Link></div>}
+      <div className="system-showcase-grid">
+        {catalogGroups.map((group) => (
+          <Link
+            key={group.slug}
+            className={`system-showcase-card${group.slug === 'cthulhu' ? ' is-development' : ''}${group.slug === selectedSystem ? ' is-selected' : ''}`}
+            href={`/games?system=${group.slug}`}
+            aria-label={`${group.title}: открыть каталог`}
+          >
+            <img src={group.artwork} alt="" loading="lazy" decoding="async" />
+            <span className="system-showcase-shade" aria-hidden="true" />
+            <span className="system-showcase-number">{group.number}</span>
+            <span className="system-showcase-copy"><small>{group.status}</small><strong>{group.title}</strong><span>{group.subtitle}</span></span>
+            <ArrowUpRight className="system-showcase-arrow" size={18} aria-hidden="true" />
+          </Link>
         ))}
       </div>
     </section>
@@ -310,14 +342,12 @@ function CatalogSection({ id = 'catalog', selectedSystem }: { id?: string; selec
       <div className="catalog-section-head">
         <div>
           <div className="section-kicker">01 — КАТАЛОГ ИГР</div>
-          <h2>Выберите<br /><em>свою историю</em></h2>
+          <h2>Выбери<br /><em>свою игру</em></h2>
         </div>
-        <p>Выбери систему, в которой хочется сыграть. Формат, тон и состав группы обсудим до записи.</p>
+        <p>Пять систем — от готического хоррора до светлого фэнтези и неонового будущего. Формат, тон и состав группы обсудим до записи.</p>
       </div>
       <div className="catalog-layout">
-        <div className="catalog-kinds">
-          <CatalogKind title="Системы" kicker="КАТАЛОГ" description="Выбери мир и настроение. Подходящий формат игры, состав группы и детали встречи обсудим перед записью." selectedSystem={selectedSystem} />
-        </div>
+        <div className="catalog-kinds"><SystemShowcase selectedSystem={selectedSystem} /></div>
         <aside className="pricing-panel" id="prices" aria-labelledby="prices-title">
           <span className="catalog-kicker">КОШЕЛЁЧЕК ДЛЯ МАДМУАЗЕЛЬ</span>
           <div className="pricing-rune" aria-hidden="true">₽</div>
@@ -328,10 +358,78 @@ function CatalogSection({ id = 'catalog', selectedSystem }: { id?: string; selec
             <div><dt>Ваншоты</dt><dd>1 500 руб.</dd></div>
             <div><dt>Закрытая группа</dt><dd>отдельный расчёт</dd></div>
           </dl>
-          <p className="pricing-note">В стоимость входит подготовка мастера, помощь с персонажем и материалы по сценарию. Цена и условия оплаты всегда фиксируются до записи.</p>
+          <p className="pricing-note">В стоимость входит подготовка мастера, помощь с персонажем и материалы по сценарию.</p>
           <Link href="/anketa" className="text-link">Подобрать игру <ArrowUpRight size={14} /></Link>
         </aside>
       </div>
+    </section>
+  );
+}
+
+function catalogSystem(slug: string) {
+  return catalogGroups.find((group) => group.slug === slug) ?? catalogGroups[3];
+}
+
+function isBeginnerFriendly(item: CatalogItem) {
+  return /нович|познаком|первая игра/i.test(`${item.status} ${item.title} ${item.description}`);
+}
+
+function CatalogGameCard({ item }: { item: CatalogItem }) {
+  const system = catalogSystem(item.systemKey);
+  const kind = item.gameType === 'campaign' ? 'Кампания' : 'Ваншот';
+  const format = item.format.trim() || 'Онлайн или очно';
+  const price = item.gameType === 'campaign' ? '1 000 руб.' : '1 500 руб.';
+
+  return (
+    <article className="catalog-game-card">
+      <div className="catalog-game-cover" style={{ backgroundImage: `url(${system.artwork})` }}>
+        {item.imageUrl && <img src={item.imageUrl} alt={`Обложка игры «${item.title}»`} loading="lazy" decoding="async" onError={(event) => { event.currentTarget.style.display = 'none'; }} />}
+        <div className="catalog-game-tags"><span>{kind}</span>{isBeginnerFriendly(item) && <span>Подходит новичкам</span>}</div>
+      </div>
+      <div className="catalog-game-body">
+        <span className="catalog-game-system">{system.title}</span>
+        <h2>{item.title}</h2>
+        <p>{item.description || 'Детали истории и тон игры обсудим перед записью.'}</p>
+        <dl className="catalog-game-facts">
+          <div><dt>Цена</dt><dd>{price}</dd></div>
+          <div><dt>Стол</dt><dd>3–5 игроков</dd></div>
+          <div><dt>Формат</dt><dd>{format}</dd></div>
+        </dl>
+        <Link className="catalog-game-action" href={`/anketa?system=${encodeURIComponent(item.title)}`}>Узнать об игре <ArrowUpRight size={14} /></Link>
+      </div>
+    </article>
+  );
+}
+
+function CatalogBrowser({ selectedSystem }: { selectedSystem?: string }) {
+  const [kind, setKind] = useState<'all' | 'campaign' | 'oneshot'>('all');
+  const { data, isLoading, isError, refetch } = useCatalog();
+  const items = (data?.items ?? []).filter((item) => (!selectedSystem || item.systemKey === selectedSystem) && (kind === 'all' || item.gameType === kind));
+  const selected = selectedSystem ? catalogGroups.find((group) => group.slug === selectedSystem) : undefined;
+
+  return (
+    <section className="catalog-browser" aria-labelledby="catalog-list-title">
+      <div className="catalog-browser-heading">
+        <div><span className="catalog-kicker">ИГРЫ В КАТАЛОГЕ</span><h2 id="catalog-list-title">{selected ? selected.title : 'Все истории'}</h2></div>
+        <div className="catalog-kind-filters" role="group" aria-label="Тип игры">
+          <button type="button" className={kind === 'all' ? 'is-active' : ''} onClick={() => setKind('all')}>Все</button>
+          <button type="button" className={kind === 'oneshot' ? 'is-active' : ''} onClick={() => setKind('oneshot')}>Ваншоты</button>
+          <button type="button" className={kind === 'campaign' ? 'is-active' : ''} onClick={() => setKind('campaign')}>Кампании</button>
+        </div>
+      </div>
+      <div className="catalog-manage-note">
+        <div><strong>Каталог можно менять без правки сайта</strong><span>В мастерской можно добавить игру, формат, описание и ссылку на обложку.</span></div>
+        <a href={`${MASTER_SITE}/master#catalog-editor`} target="_blank" rel="noreferrer">Управлять каталогом <ArrowUpRight size={14} /></a>
+      </div>
+      {isLoading && <div className="calendar-state" role="status">Загружаем игры…</div>}
+      {isError && <div className="calendar-state" role="alert"><h2>Каталог временно недоступен</h2><p>Не удалось получить актуальные карточки.</p><button className="button button-primary" onClick={() => refetch()}>Повторить</button></div>}
+      {!isLoading && !isError && selectedSystem === 'cthulhu' && <div className="catalog-development-state">
+        <img src="/assets/system-cthulhu.png" alt="Штормовое море и маяк" />
+        <div><span className="catalog-kicker">СИСТЕМА 02</span><h2>Зов Ктулху пока в разработке</h2><p>Новые игры появятся здесь, когда система будет готова к запуску.</p><Link href="/anketa" className="button button-ghost">Оставить пожелание</Link></div>
+      </div>}
+      {!isLoading && !isError && selectedSystem !== 'cthulhu' && (items.length ? <div className="catalog-game-grid">
+        {items.map((item) => <CatalogGameCard item={item} key={item.id} />)}
+      </div> : <div className="calendar-state"><h2>Подходящих игр пока нет</h2><p>Смените фильтр или оставьте пожелание — подберём формат вместе.</p><Link href="/anketa" className="button button-primary">Оставить пожелание</Link></div>)}
     </section>
   );
 }
@@ -465,7 +563,6 @@ function CalendarPage() {
   const today = todayInMoscow();
   const hasPublishedEvents = events.some((event) => !event.archived);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(today));
-  const [viewMode, setViewMode] = useState<'upcoming' | 'calendar'>('upcoming');
   const [formatFilter, setFormatFilter] = useState('all');
   const [storyFilter, setStoryFilter] = useState('all');
   const [beginnersOnly, setBeginnersOnly] = useState(false);
@@ -476,10 +573,9 @@ function CalendarPage() {
       const formatMatches = formatFilter === 'all' || (formatFilter === 'online' ? normalizedFormat.includes('online') : normalizedFormat.includes('offline'));
       const storyMatches = storyFilter === 'all' || game.storyType === storyFilter;
       const beginnerMatches = !beginnersOnly || !experience || /нович|любой|начин/.test(experience);
-      const viewMatches = viewMode === 'calendar' || game.status !== 'day_off';
-      return formatMatches && storyMatches && beginnerMatches && viewMatches;
+      return formatMatches && storyMatches && beginnerMatches;
     });
-  }, [beginnersOnly, events, formatFilter, storyFilter, viewMode, weekStart]);
+  }, [beginnersOnly, events, formatFilter, storyFilter, weekStart]);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => {
     const date = addDays(weekStart, index);
     return { date, label: weekDayLabels[index], name: formatDayName(date), games: weekGames.filter((game) => game.dateISO === date) };
@@ -494,13 +590,13 @@ function CalendarPage() {
     <Shell>
       <main className="subpage calendar-page">
         <div className="calendar-hero reveal">
-          <div className="eyebrow">витрина ближайших игр</div>
-          <h1>Найдите<br /><em>свою игру</em></h1>
-          <p>Выберите открытый набор по формату и опыту. В календаре можно посмотреть все даты и свободные слоты для своей компании. Не нашли подходящую игру — <Link href="/anketa">оставьте пожелания</Link>.</p>
+          <div className="eyebrow">единый календарь игр</div>
+          <h1>Вся неделя<br /><em>перед глазами</em></h1>
+          <p>Здесь собраны открытые наборы, текущие кампании, детские группы, выходные и свободные слоты. Не нашли подходящую дату — <Link href="/anketa">оставьте пожелания</Link>.</p>
         </div>
-        <div className="calendar-view-switcher" role="group" aria-label="Как показать игры">
-          <button type="button" className={viewMode === 'upcoming' ? 'is-active' : ''} onClick={() => setViewMode('upcoming')}>Ближайшие игры</button>
-          <button type="button" className={viewMode === 'calendar' ? 'is-active' : ''} onClick={() => setViewMode('calendar')}>Календарь и свободные слоты</button>
+        <div className="calendar-manage-note">
+          <div><strong>Как добавить игру</strong><span>Откройте мастерский календарь, войдите по паролю и нажмите «Добавить игру». Изменения появятся здесь автоматически.</span></div>
+          <a href={`${MASTER_SITE}/calendar`} target="_blank" rel="noreferrer">Добавить игру <ArrowUpRight size={14} /></a>
         </div>
         {isLoading && <div className="calendar-state" role="status">Загружаем расписание…</div>}
         {isError && <div className="calendar-state" role="alert"><h2>Календарь временно недоступен</h2><p>Не удалось получить актуальные даты. Попробуйте обновить список.</p><button className="button button-primary" onClick={() => refetch()}>Обновить календарь</button></div>}
@@ -555,6 +651,7 @@ function GamesPage() {
     <Shell>
       <main className="subpage catalog-page">
         <CatalogSection id="catalog" selectedSystem={selectedSystem} />
+        <CatalogBrowser selectedSystem={selectedSystem} />
       </main>
     </Shell>
   );
@@ -564,6 +661,7 @@ function ApplicationPage() {
   const searchParams = new URLSearchParams(window.location.search);
   const eventId = searchParams.get('event') ?? '';
   const occurrenceDate = searchParams.get('date') ?? '';
+  const requestedSystem = searchParams.get('system') ?? '';
   const hasSelection = Boolean(eventId && occurrenceDate);
   const { games, isLoading: isGamesLoading } = useLiveGames();
   const selectionQuery = useGetApplicationSelection(
@@ -583,7 +681,7 @@ function ApplicationPage() {
     format: 'Пока не знаю',
     place: 'Готовы обсудить',
     experience: '',
-    system: '',
+    system: requestedSystem,
     genres: '',
     tone: '',
     wishes: '',
