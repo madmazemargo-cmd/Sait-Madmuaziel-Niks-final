@@ -1,4 +1,4 @@
-const API_ORIGIN = 'https://madmuazelle-niks-api.workers.dev';
+const API_ORIGIN = 'https://madmuazelle-niks-api.dndmaster.workers.dev';
 const ROUTES = new Map([
   ['healthz', new Set(['GET'])],
   ['calendar', new Set(['GET'])],
@@ -9,11 +9,11 @@ const ROUTES = new Map([
   ['auth/logout', new Set(['POST'])],
 ]);
 const MAX_BODY_BYTES = 32 * 1024;
-
+ 
 function jsonError(message, status, extraHeaders = {}) {
   return Response.json({ error: message }, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...extraHeaders } });
 }
-
+ 
 export async function onRequest(context) {
   const segments = Array.isArray(context.params.path) ? context.params.path : [context.params.path].filter(Boolean);
   const endpoint = segments.join('/');
@@ -26,7 +26,7 @@ export async function onRequest(context) {
   if (method === 'POST' && Number(context.request.headers.get('Content-Length') ?? '0') > MAX_BODY_BYTES) return jsonError('Запрос слишком большой.', 413);
   return proxy(context, endpoint);
 }
-
+ 
 async function proxy(context, endpoint) {
   const incomingUrl = new URL(context.request.url);
   const upstreamUrl = new URL(`/api/${endpoint}`, API_ORIGIN);
