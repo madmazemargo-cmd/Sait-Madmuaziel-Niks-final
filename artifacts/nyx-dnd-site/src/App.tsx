@@ -14,6 +14,7 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
+import MasterRoutes from '@/master';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -291,7 +292,7 @@ type CatalogItem = {
 
 type CatalogResponse = { items: CatalogItem[] };
 
-const MASTER_SITE = 'https://dndmaster.dndmaster.workers.dev';
+const MASTER_SITE = '';
 
 function useCatalog() {
   return useQuery({
@@ -805,7 +806,9 @@ function Seo() {
 }
 
 function Router() {
-  return <ErrorBoundary resetKey={useLocation()[0]}><Seo /><Switch><Route path="/" component={Home} /><Route path="/calendar" component={CalendarPage} /><Route path="/anketa" component={ApplicationPage} /><Route path="/games" component={GamesPage} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+  const [location] = useLocation();
+  if (location === '/master' || location === '/master/' || location.startsWith('/master/')) return <MasterRoutes />;
+  return <ErrorBoundary resetKey={location}><Seo /><Switch><Route path="/" component={Home} /><Route path="/calendar" component={CalendarPage} /><Route path="/anketa" component={ApplicationPage} /><Route path="/games" component={GamesPage} /><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
 
 function App() {
