@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Мадмуазель Никс">
+  <rect width="64" height="64" rx="16" fill="#120915"/>
+  <circle cx="32" cy="32" r="28" fill="#D8FF6C"/>
+  <circle cx="32" cy="32" r="26.5" fill="none" stroke="#18200C" stroke-opacity=".18" stroke-width="1.5"/>
+  <path d="M11 32c5.2-8.2 12.2-12.4 21-12.4S47.8 23.8 53 32c-5.2 8.2-12.2 12.4-21 12.4S16.2 40.2 11 32Z" fill="none" stroke="#18200C" stroke-width="3.5" stroke-linejoin="round"/>
+  <circle cx="32" cy="32" r="7.2" fill="#18200C"/>
+  <path d="M28.4 27h7v4.8h-4v4.8h7" fill="none" stroke="#D8FF6C" stroke-width="2.3" stroke-linecap="square"/>
+  <path d="M10.6 23.2h6v-4.6h5.8M53.4 40.8h-6v4.6h-5.8" fill="none" stroke="#18200C" stroke-width="2.1" stroke-linecap="square"/>
+</svg>
