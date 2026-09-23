@@ -165,6 +165,9 @@ components:
           type: string
         recurrence:
           type: string
+        recurrenceUntil:
+          type: ["string", "null"]
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
         excludedDates:
           type: array
           items:
@@ -188,6 +191,7 @@ components:
         - archived
         - applicationUrl
         - recurrence
+        - recurrenceUntil
         - excludedDates
     CalendarResponse:
       type: object

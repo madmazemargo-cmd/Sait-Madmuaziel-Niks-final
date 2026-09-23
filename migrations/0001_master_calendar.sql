@@ -48,7 +48,9 @@ CREATE TABLE IF NOT EXISTS calendar_events (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_calendar_events_date ON calendar_events(event_date, sort_order);
+-- The live calendar_events table comes from an earlier schema without
+-- sort_order, so keep this index limited to columns present in both schemas.
+CREATE INDEX IF NOT EXISTS idx_calendar_events_date ON calendar_events(event_date, start_time);
 
 CREATE TABLE IF NOT EXISTS calendar_event_exclusions (
   event_id TEXT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
@@ -80,4 +82,3 @@ CREATE TABLE IF NOT EXISTS applications (
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_applications_created ON applications(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status, created_at DESC);

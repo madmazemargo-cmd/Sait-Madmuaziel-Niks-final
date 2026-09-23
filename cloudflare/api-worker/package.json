@@ -2,13 +2,14 @@
   "name": "madmuazelle-niks-api-worker",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.17.1",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260920.0",
+    "@cloudflare/workers-types": "5.20260921.1",
     "typescript": "^5.9.3",
     "wrangler": "^4.36.0"
   }

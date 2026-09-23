@@ -23,6 +23,19 @@ const text = (value: unknown, max = 4000) => typeof value === 'string' ? value.t
 const validDate = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 const nowIso = () => new Date().toISOString();
 const id = () => crypto.randomUUID();
+function nullableNumber(value: unknown) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function legacyExcludedDates(row: Row) {
+  const source = row.excluded_dates;
+  const values = Array.isArray(source) ? source : typeof source === 'string' && source.trim() ? (() => {
+    try { return JSON.parse(source) as unknown; } catch { return []; }
+  })() : [];
+  return Array.isArray(values) ? [...new Set(values.filter(validDate))] : [];
+}
 
 function corsHeaders(request: Request, env: Env): HeadersInit {
   const origin = request.headers.get('Origin');
@@ -50,6 +63,10 @@ function clientIp(request: Request) { return request.headers.get('CF-Connecting-
 async function sha256(value: string) {
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function csrfTokenForSession(token: string, env: Env) {
+  return sha256(`${env.SESSION_PEPPER ?? ''}:csrf:${token}`);
 }
 
 async function derivePassword(password: string, salt: string, iterations = PASSWORD_ITERATIONS) {
@@ -87,7 +104,7 @@ async function rateLimit(key: string, env: Env) {
 function dateUtc(value: string) { const [year, month, day] = value.split('-').map(Number); return Date.UTC(year, month - 1, day); }
 function occursOn(row: Row, date: string) {
   const start = String(row.event_date); if (date < start) return false;
-  const until = row.recurrence_until ? String(row.recurrence_until) : null; if (until && date > until) return false;
+  const until = validDate(row.recurrence_until) ? row.recurrence_until : null; if (until && date > until) return false;
   const recurrence = String(row.recurrence ?? 'none'); if (recurrence === 'none') return date === start;
   if (recurrence === 'daily') return true;
   const days = Math.round((dateUtc(date) - dateUtc(start)) / 86400000);
@@ -97,23 +114,33 @@ function occursOn(row: Row, date: string) {
   return false;
 }
 
-function toPublicEvent(row: Row) {
+function toPublicEvent(row: Row): {
+  id: unknown; title: unknown; eventDate: unknown; startTime: unknown; status: unknown; seats: number | null;
+  description: unknown; system: unknown; format: unknown; location: unknown; duration: unknown; price: unknown;
+  experience: unknown; age: unknown; playerPrep: unknown; archived: boolean; applicationUrl: string;
+  recurrence: unknown; recurrenceUntil: string | null; excludedDates: string[]; revision: number;
+} {
+  const recurrenceUntil = validDate(row.recurrence_until) ? row.recurrence_until : null;
   return {
     id: row.id, title: row.title, eventDate: row.event_date, startTime: row.start_time,
-    status: row.status, seats: row.seats === null ? null : Number(row.seats), description: row.description,
+    status: row.status, seats: nullableNumber(row.seats), description: row.description,
     system: row.system, format: row.format, location: row.location, duration: row.duration,
     price: row.price, experience: row.experience, age: row.age, playerPrep: row.player_prep,
     archived: Boolean(row.archived), applicationUrl: '', recurrence: row.recurrence,
-    excludedDates: [], revision: Number(row.revision ?? 1),
+    recurrenceUntil,
+    excludedDates: legacyExcludedDates(row), revision: Number(row.revision ?? 1),
   };
 }
 
 async function publicCalendar(env: Env) {
-  const { results } = await env.DB.prepare('SELECT * FROM calendar_events WHERE archived = 0 ORDER BY event_date, sort_order, start_time').all();
+  // The production database predates the master-calendar schema and does not
+  // have sort_order on calendar_events. Date/time ordering works for both
+  // the legacy and newly provisioned schemas.
+  const { results } = await env.DB.prepare('SELECT * FROM calendar_events WHERE archived = 0 ORDER BY event_date, start_time, id').all();
   const events = results.map(toPublicEvent);
   for (const event of events) {
     const exclusions = await env.DB.prepare('SELECT occurrence_date FROM calendar_event_exclusions WHERE event_id = ? ORDER BY occurrence_date').bind(event.id).all();
-    event.excludedDates = exclusions.results.map((row) => String((row as Row).occurrence_date));
+    event.excludedDates = [...new Set([...event.excludedDates, ...exclusions.results.map((row) => String((row as Row).occurrence_date)).filter(validDate)])];
   }
   return { events };
 }
@@ -121,8 +148,12 @@ async function publicCalendar(env: Env) {
 async function findSelection(env: Env, eventId: string, date: string) {
   const row = await env.DB.prepare('SELECT * FROM calendar_events WHERE id = ? AND archived = 0').bind(eventId).first<Row>();
   if (!row || !validDate(date) || !occursOn(row, date)) return null;
+  const status = String(row.status ?? 'available');
+  const seats = row.seats === null || row.seats === undefined || row.seats === '' ? null : Number(row.seats);
+  if (status !== 'available' && status !== 'waiting') return null;
+  if (status === 'available' && seats !== null && (!Number.isFinite(seats) || seats <= 0)) return null;
   const excluded = await env.DB.prepare('SELECT 1 FROM calendar_event_exclusions WHERE event_id = ? AND occurrence_date = ?').bind(eventId, date).first();
-  if (excluded) return null;
+  if (excluded || legacyExcludedDates(row).includes(date)) return null;
   return {
     id: String(row.id), title: String(row.title), date, dateLabel: date, time: String(row.start_time || 'Уточняется'),
     status: String(row.status), price: String(row.price), place: String(row.location || 'Формат уточняется'),
@@ -152,15 +183,113 @@ async function login(request: Request, env: Env) {
   if (!user || !password) return json({ error: 'Неверный логин или пароль.' }, 401);
   const hash = await derivePassword(password, String(user.password_salt), Number(user.password_iterations));
   if (hash !== String(user.password_hash)) return json({ error: 'Неверный логин или пароль.' }, 401);
-  const token = randomToken(); const csrf = randomToken(); const created = nowIso();
+  const token = randomToken(); const csrf = await csrfTokenForSession(token, env); const created = nowIso();
   await env.DB.prepare('INSERT INTO master_sessions (id, user_id, token_hash, csrf_token_hash, expires_at, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id(), user.id, await sha256(`${env.SESSION_PEPPER ?? ''}${token}`), await sha256(csrf), new Date(Date.now() + SESSION_TTL_MS).toISOString(), created, created).run();
   await env.DB.prepare('UPDATE master_users SET last_login_at = ?, updated_at = ? WHERE id = ?').bind(created, created, user.id).run();
   return json({ authenticated: true, user: { id: user.id, login: user.login, role: user.role }, csrfToken: csrf }, 200, { 'Set-Cookie': `master_session=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_TTL_MS / 1000}` });
 }
 
 async function masterEvents(env: Env) {
-  const { results } = await env.DB.prepare('SELECT * FROM calendar_events ORDER BY event_date, sort_order, start_time').all();
-  return { events: results.map((row) => ({ ...row, seats: (row as Row).seats === null ? null : Number((row as Row).seats), archived: Boolean((row as Row).archived), revision: Number((row as Row).revision ?? 1) })) };
+  const { results } = await env.DB.prepare('SELECT * FROM calendar_events ORDER BY event_date, start_time, id').all();
+  return { events: results.map((row) => ({ ...row, seats: nullableNumber((row as Row).seats), archived: Boolean((row as Row).archived), revision: Number((row as Row).revision ?? 1) })) };
+}
+
+type CatalogType = 'campaign' | 'oneshot';
+
+function catalogSystemKey(value: unknown) {
+  const source = text(value, 100).toLowerCase().replace(/ё/g, 'е');
+  if (source.includes('dnd') || source.includes('d&d') || source.includes('dungeons') || source.includes('днд')) return 'dnd';
+  if (source.includes('vampire') || source.includes('вампир')) return 'vampires';
+  if (source.includes('dagger')) return 'daggerheart';
+  if (source.includes('cyber')) return 'cyberpunk';
+  if (source.includes('cthulhu') || source.includes('ктул')) return 'cthulhu';
+  return null;
+}
+
+function firstField(value: Row, keys: string[], fallback: unknown = '') {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) return value[key];
+  }
+  return fallback;
+}
+
+function catalogType(value: unknown): CatalogType | null {
+  const normalized = text(value, 30).toLowerCase();
+  if (normalized === 'campaign' || normalized === 'campaigns' || normalized === 'кампания' || normalized === 'кампании') return 'campaign';
+  if (normalized === 'oneshot' || normalized === 'one-shot' || normalized === 'ваншот' || normalized === 'ваншоты') return 'oneshot';
+  return null;
+}
+
+function catalogBoolean(value: unknown, fallback: boolean) {
+  if (typeof value === 'boolean') return value;
+  if (value === 1 || value === '1' || value === 'true') return true;
+  if (value === 0 || value === '0' || value === 'false') return false;
+  return fallback;
+}
+
+function catalogImage(value: unknown) {
+  const source = text(value, 1000);
+  if (!source) return '';
+  if (source.startsWith('/') && !source.startsWith('//')) return source;
+  try {
+    const parsed = new URL(source);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? source : '';
+  } catch {
+    return '';
+  }
+}
+
+function catalogSortOrder(value: unknown, fallback = 0) {
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 0 && number <= 100000 ? number : fallback;
+}
+
+function toCatalogItem(row: Row) {
+  return {
+    id: String(row.id),
+    systemKey: catalogSystemKey(row.system_key) ?? String(row.system_key ?? ''),
+    title: String(row.title ?? ''),
+    description: String(row.description ?? ''),
+    imageUrl: String(row.image_url ?? ''),
+    age: String(row.age ?? ''),
+    format: String(row.format ?? ''),
+    price: String(row.price ?? ''),
+    gameType: catalogType(row.game_type) ?? 'oneshot',
+    status: String(row.status ?? ''),
+    sortOrder: Number(row.sort_order ?? 0),
+    published: catalogBoolean(row.published, false),
+    revision: Number(row.revision ?? 1),
+    updatedAt: String(row.updated_at ?? ''),
+  };
+}
+
+async function publicCatalog(env: Env) {
+  const { results } = await env.DB.prepare('SELECT * FROM catalog_items WHERE published = 1 ORDER BY sort_order, updated_at DESC, title COLLATE NOCASE').all();
+  return { items: results.map((row) => toCatalogItem(row as Row)) };
+}
+
+async function masterCatalog(env: Env) {
+  const { results } = await env.DB.prepare('SELECT * FROM catalog_items ORDER BY sort_order, updated_at DESC, title COLLATE NOCASE').all();
+  return { items: results.map((row) => toCatalogItem(row as Row)) };
+}
+
+function normalizeCatalogInput(body: Row, current?: Row) {
+  const systemKey = catalogSystemKey(firstField(body, ['systemKey', 'system_key', 'system'], current?.system_key ?? ''));
+  const title = text(firstField(body, ['title'], current?.title ?? ''), 200);
+  const description = text(firstField(body, ['description'], current?.description ?? ''), 4000);
+  const imageUrl = catalogImage(firstField(body, ['imageUrl', 'image_url', 'image'], current?.image_url ?? ''));
+  const age = text(firstField(body, ['age'], current?.age ?? ''), 100);
+  const format = text(firstField(body, ['format'], current?.format ?? ''), 100);
+  const price = text(firstField(body, ['price'], current?.price ?? ''), 100);
+  const gameType = catalogType(firstField(body, ['gameType', 'type', 'game_type'], current?.game_type ?? 'oneshot'));
+  const status = text(firstField(body, ['status'], current?.status ?? ''), 200);
+  const sortOrder = catalogSortOrder(firstField(body, ['sortOrder', 'sort_order'], current?.sort_order ?? 0), Number(current?.sort_order ?? 0));
+  const published = catalogBoolean(firstField(body, ['published'], current?.published ?? 1), Boolean(current?.published ?? 1));
+
+  if (!systemKey) return { error: 'Выберите поддерживаемую систему игры.' } as const;
+  if (!title) return { error: 'Укажите название игры.' } as const;
+  if (!gameType) return { error: 'Выберите тип игры.' } as const;
+  return { systemKey, title, description, imageUrl, age, format, price, gameType, status, sortOrder, published } as const;
 }
 
 async function handle(request: Request, env: Env): Promise<Response> {
@@ -168,7 +297,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204 });
   if (request.method === 'GET' && path === '/api/healthz') return json({ status: 'ok' });
   if (request.method === 'POST' && path === '/api/auth/login') return login(request, env);
-  if (request.method === 'GET' && path === '/api/catalog') return json({ items: [] });
+  if (request.method === 'GET' && path === '/api/catalog') return json(await publicCatalog(env));
   if (request.method === 'GET' && path === '/api/calendar') return json(await publicCalendar(env));
   if (request.method === 'GET' && path === '/api/applications') {
     const game = await findSelection(env, text(url.searchParams.get('event'), 100), text(url.searchParams.get('date'), 10));
@@ -192,15 +321,50 @@ async function handle(request: Request, env: Env): Promise<Response> {
   const session = await auth(request, env);
   if (!session) return json({ error: 'Требуется вход в кабинет мастера.' }, 401);
   if (request.method === 'GET' && path === '/api/auth/me') {
-    const csrfToken = randomToken();
+    const csrfToken = await csrfTokenForSession(cookies(request).master_session, env);
     await env.DB.prepare('UPDATE master_sessions SET csrf_token_hash = ?, last_seen_at = ? WHERE id = ?').bind(await sha256(csrfToken), nowIso(), session.id).run();
     return json({ authenticated: true, user: { id: session.user_id, login: session.login, role: session.role }, csrfToken });
   }
-  if (request.method === 'POST' && path === '/api/auth/logout') return json({ ok: true }, 200, { 'Set-Cookie': 'master_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0' });
+  if (request.method === 'POST' && path === '/api/auth/logout') {
+    await env.DB.prepare('UPDATE master_sessions SET revoked_at = ?, last_seen_at = ? WHERE id = ?').bind(nowIso(), nowIso(), session.id).run();
+    return json({ ok: true }, 200, { 'Set-Cookie': 'master_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0' });
+  }
   if (request.method === 'GET' && path === '/api/master/events') return json(await masterEvents(env));
   if (request.method === 'GET' && path === '/api/master/applications') {
     const { results } = await env.DB.prepare('SELECT * FROM applications ORDER BY created_at DESC LIMIT 200').all();
     return json({ applications: results });
+  }
+  if (request.method === 'GET' && path === '/api/master/catalog') return json(await masterCatalog(env));
+  if (request.method === 'POST' && path === '/api/master/catalog') {
+    if (await requireCsrf(request, session)) return json({ error: 'Недействительный CSRF-токен.' }, 403);
+    const body = await readBody(request);
+    if (!isRecord(body)) return json({ error: 'Некорректные данные.' }, 400);
+    const input = normalizeCatalogInput(body);
+    if ('error' in input) return json({ error: input.error }, 400);
+    const timestamp = nowIso();
+    const itemId = id();
+    await env.DB.prepare(`INSERT INTO catalog_items (id, system_key, title, description, image_url, age, format, price, game_type, status, sort_order, published, revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`).bind(itemId, input.systemKey, input.title, input.description, input.imageUrl, input.age, input.format, input.price, input.gameType, input.status, input.sortOrder, input.published ? 1 : 0, timestamp, timestamp).run();
+    const created = await env.DB.prepare('SELECT * FROM catalog_items WHERE id = ?').bind(itemId).first<Row>();
+    return json({ item: created ? toCatalogItem(created) : { id: itemId } }, 201);
+  }
+  const catalogMatch = path.match(/^\/api\/master\/catalog\/([^/]+)$/);
+  if (catalogMatch && (request.method === 'PATCH' || request.method === 'DELETE')) {
+    if (await requireCsrf(request, session)) return json({ error: 'Недействительный CSRF-токен.' }, 403);
+    const itemId = decodeURIComponent(catalogMatch[1]);
+    const current = await env.DB.prepare('SELECT * FROM catalog_items WHERE id = ?').bind(itemId).first<Row>();
+    if (!current) return json({ error: 'Игра в каталоге не найдена.' }, 404);
+    if (request.method === 'DELETE') {
+      const result = await env.DB.prepare('DELETE FROM catalog_items WHERE id = ?').bind(itemId).run();
+      return result.meta.changes ? json({ ok: true }) : json({ error: 'Игра в каталоге не найдена.' }, 404);
+    }
+    const body = await readBody(request);
+    if (!isRecord(body)) return json({ error: 'Некорректные данные.' }, 400);
+    const input = normalizeCatalogInput(body, current);
+    if ('error' in input) return json({ error: input.error }, 400);
+    const result = await env.DB.prepare(`UPDATE catalog_items SET system_key = ?, title = ?, description = ?, image_url = ?, age = ?, format = ?, price = ?, game_type = ?, status = ?, sort_order = ?, published = ?, revision = revision + 1, updated_at = ? WHERE id = ? AND revision = ?`).bind(input.systemKey, input.title, input.description, input.imageUrl, input.age, input.format, input.price, input.gameType, input.status, input.sortOrder, input.published ? 1 : 0, nowIso(), itemId, Number(body.revision ?? 0)).run();
+    if (!result.meta.changes) return json({ error: 'Запись уже изменилась. Обновите страницу.' }, 409);
+    const updated = await env.DB.prepare('SELECT * FROM catalog_items WHERE id = ?').bind(itemId).first<Row>();
+    return json({ item: updated ? toCatalogItem(updated) : { id: itemId } });
   }
   if (request.method === 'POST' && path === '/api/master/events') {
     if (await requireCsrf(request, session)) return json({ error: 'Недействительный CSRF-токен.' }, 403);
@@ -225,7 +389,21 @@ async function handle(request: Request, env: Env): Promise<Response> {
   return json({ error: 'Not found' }, 404);
 }
 
-export default { async fetch(request: Request, env: Env) { return secure(await handle(request, env), request, env); } };
+export default {
+  async fetch(request: Request, env: Env) {
+    try {
+      return secure(await handle(request, env), request, env);
+    } catch (error) {
+      console.error(JSON.stringify({
+        message: 'request failed',
+        method: request.method,
+        path: new URL(request.url).pathname,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+      return secure(json({ error: 'Внутренняя ошибка сервера.' }, 500), request, env);
+    }
+  },
+};
 
 export class RateLimiter {
   constructor(private readonly state: DurableObjectState) {}

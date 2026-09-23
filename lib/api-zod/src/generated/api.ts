@@ -22,6 +22,7 @@ export const HealthCheckResponse = zod.object({
  * @summary Get the live game calendar
  */
 export const getCalendarResponseEventsItemEventDateRegExp = new RegExp('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+export const getCalendarResponseEventsItemRecurrenceUntilRegExp = new RegExp('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
 
 
 export const GetCalendarResponse = zod.object({
@@ -44,6 +45,7 @@ export const GetCalendarResponse = zod.object({
   "archived": zod.boolean(),
   "applicationUrl": zod.string(),
   "recurrence": zod.string(),
+  "recurrenceUntil": zod.string().regex(getCalendarResponseEventsItemRecurrenceUntilRegExp).nullable(),
   "excludedDates": zod.array(zod.string())
 }))
 })

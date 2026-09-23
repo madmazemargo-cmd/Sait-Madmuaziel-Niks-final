@@ -9,6 +9,13 @@ const ROUTES = new Map([
   ['auth/logout', new Set(['POST'])],
 ]);
 const MAX_BODY_BYTES = 32 * 1024;
+
+function masterMethods(endpoint) {
+  if (endpoint === 'master/catalog' || endpoint === 'master/events') return new Set(['GET', 'POST']);
+  if (endpoint === 'master/applications') return new Set(['GET']);
+  if (/^master\/(catalog|events)\/[^/]+$/.test(endpoint)) return new Set(['PATCH', 'DELETE']);
+  return null;
+}
  
 function jsonError(message, status, extraHeaders = {}) {
   return Response.json({ error: message }, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...extraHeaders } });
@@ -19,7 +26,13 @@ export async function onRequest(context) {
   const endpoint = segments.join('/');
   const method = context.request.method.toUpperCase();
   if (method === 'OPTIONS') return new Response(null, { status: 204, headers: { Allow: 'GET, POST, PATCH, DELETE, OPTIONS' } });
-  if (endpoint.startsWith('master/')) return proxy(context, endpoint);
+  if (endpoint.startsWith('master/')) {
+    const allowedMethods = masterMethods(endpoint);
+    if (!allowedMethods) return jsonError('API route not found.', 404);
+    if (!allowedMethods.has(method)) return jsonError('Method not allowed.', 405, { Allow: [...allowedMethods, 'OPTIONS'].join(', ') });
+    if (['POST', 'PATCH'].includes(method) && Number(context.request.headers.get('Content-Length') ?? '0') > MAX_BODY_BYTES) return jsonError('Запрос слишком большой.', 413);
+    return proxy(context, endpoint);
+  }
   const allowedMethods = ROUTES.get(endpoint);
   if (!allowedMethods) return jsonError('API route not found.', 404);
   if (!allowedMethods.has(method)) return jsonError('Method not allowed.', 405, { Allow: [...allowedMethods, 'OPTIONS'].join(', ') });

@@ -8,8 +8,8 @@ ALLOWED_ORIGIN = "https://sait-madmuaziel-niks-final.pages.dev"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "madmuazelle-niks"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_name = "dndmaster-calendar"
+database_id = "8750d8da-35f7-412d-83f6-2f9a1e1ea61f"
 migrations_dir = "../../migrations"
 
 [durable_objects]

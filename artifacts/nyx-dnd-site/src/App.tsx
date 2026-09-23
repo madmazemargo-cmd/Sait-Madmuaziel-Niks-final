@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
-import { ArrowUpRight, CalendarDays, Check, Clock3, Menu, Video, X } from 'lucide-react';
-import { Link, Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
+import { ArrowUpRight, Check, Menu, X } from 'lucide-react';
+import { Link, Route, Switch, Router as WouterRouter, useLocation, useSearch } from 'wouter';
 import {
   useGetApplicationSelection,
   useGetCalendar,
@@ -143,7 +143,7 @@ function eventImage(event: CalendarEvent) {
 }
 
 function eventOccursOn(event: CalendarEvent, date: string) {
-  if (date < event.eventDate || event.excludedDates.includes(date)) return false;
+  if (date < event.eventDate || (event.recurrenceUntil && date > event.recurrenceUntil) || event.excludedDates.includes(date)) return false;
   if (event.recurrence === 'none') return date === event.eventDate;
 
   const start = parseDateKey(event.eventDate);
@@ -282,11 +282,11 @@ type CatalogSystem = {
 };
 
 const catalogGroups: CatalogSystem[] = [
-  { number: '01', slug: 'vampires', title: 'Вампиры: Маскарад', subtitle: 'Vampire: The Masquerade', status: 'Готический хоррор', artwork: '/assets/system-vampires.png' },
-  { number: '02', slug: 'cthulhu', title: 'Зов Ктулху', subtitle: 'Call of Cthulhu', status: 'В разработке', artwork: '/assets/system-cthulhu.png' },
+  { number: '01', slug: 'dnd', title: 'Dungeons & Dragons', subtitle: 'D&D 5e', status: 'Ваншоты и кампании', artwork: '/assets/system-dnd.png' },
+  { number: '02', slug: 'vampires', title: 'Вампиры: Маскарад', subtitle: 'Vampire: The Masquerade', status: 'Готический хоррор', artwork: '/assets/system-vampires.png' },
   { number: '03', slug: 'daggerheart', title: 'Daggerheart', subtitle: 'Героическое фэнтези', status: 'Игры и кампании', artwork: '/assets/system-daggerheart.png' },
-  { number: '04', slug: 'dnd', title: 'Dungeons & Dragons', subtitle: 'D&D 5e', status: 'Ваншоты и кампании', artwork: '/assets/system-dnd.png' },
-  { number: '05', slug: 'cyberpunk', title: 'Cyberpunk 2020', subtitle: 'Тёмное будущее', status: 'Игры и кампании', artwork: '/assets/system-cyberpunk.png' },
+  { number: '04', slug: 'cyberpunk', title: 'Cyberpunk 2020', subtitle: 'Тёмное будущее', status: 'Игры и кампании', artwork: '/assets/system-cyberpunk.png' },
+  { number: '05', slug: 'cthulhu', title: 'Зов Ктулху', subtitle: 'Call of Cthulhu', status: 'В разработке', artwork: '/assets/system-cthulhu.png' },
 ];
 
 type CatalogItem = {
@@ -299,6 +299,10 @@ type CatalogItem = {
   status: string;
   price: string;
   format: string;
+  age?: string;
+  players?: string;
+  duration?: string;
+  tags?: string[];
   sortOrder: number;
   published: boolean;
   updatedAt: string;
@@ -306,7 +310,24 @@ type CatalogItem = {
 
 type CatalogResponse = { items: CatalogItem[] };
 
-const MASTER_SITE = '';
+function normalizeSystemKey(value: string) {
+  const source = value.toLowerCase().replace(/ё/g, 'е');
+  if (source.includes('dnd') || source.includes('d&d') || source.includes('dungeons') || source.includes('днд')) return 'dnd';
+  if (source.includes('vampire') || source.includes('вампир')) return 'vampires';
+  if (source.includes('dagger')) return 'daggerheart';
+  if (source.includes('cyber')) return 'cyberpunk';
+  if (source.includes('cthulhu') || source.includes('ктул')) return 'cthulhu';
+  return value;
+}
+
+function catalogFormatLabel(value: string) {
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!normalized) return 'Онлайн или очно';
+  if ((normalized.includes('online') || normalized.includes('онлайн')) && (normalized.includes('offline') || normalized.includes('очно'))) return 'Онлайн и очно';
+  if (normalized === 'online' || normalized === 'онлайн') return 'Онлайн';
+  if (normalized === 'offline' || normalized === 'оффлайн' || normalized === 'очно' || normalized === 'офлайн') return 'Очно';
+  return value.trim();
+}
 
 function useCatalog() {
   return useQuery({
@@ -315,8 +336,8 @@ function useCatalog() {
       const response = await fetch('/api/catalog', { cache: 'no-store', headers: { Accept: 'application/json' } });
       if (!response.ok) throw new Error('Не удалось загрузить каталог.');
       const payload = await response.json() as Partial<CatalogResponse>;
-      if (!Array.isArray(payload.items)) throw new Error('Каталог вернул неверные данные.');
-      return { items: payload.items };
+      if (!Array.isArray(payload.items)) return { items: [] };
+      return { items: payload.items.filter((item) => item.published !== false) };
     },
     staleTime: 0,
     refetchOnMount: true,
@@ -343,6 +364,7 @@ function SystemShowcase({ selectedSystem }: { selectedSystem?: string }) {
             <span className="system-showcase-shade" aria-hidden="true" />
             <span className="system-showcase-number">{group.number}</span>
             <span className="system-showcase-copy"><small>{group.status}</small><strong>{group.title}</strong><span>{group.subtitle}</span></span>
+            {group.slug === 'cthulhu' && <span className="system-showcase-development">В РАЗРАБОТКЕ</span>}
             <ArrowUpRight className="system-showcase-arrow" size={18} aria-hidden="true" />
           </Link>
         ))}
@@ -357,7 +379,7 @@ function CatalogSection({ id = 'catalog', selectedSystem }: { id?: string; selec
       <div className="catalog-section-head">
         <div>
           <div className="section-kicker">01 — КАТАЛОГ ИГР</div>
-          <h2>Выбери<br /><em>свою игру</em></h2>
+          <h2>Каталог<br /><em>игр</em></h2>
         </div>
         <p>Пять систем — от готического хоррора до светлого фэнтези и неонового будущего. Формат, тон и состав группы обсудим до записи.</p>
       </div>
@@ -382,7 +404,8 @@ function CatalogSection({ id = 'catalog', selectedSystem }: { id?: string; selec
 }
 
 function catalogSystem(slug: string) {
-  return catalogGroups.find((group) => group.slug === slug) ?? catalogGroups[3];
+  const normalized = normalizeSystemKey(slug);
+  return catalogGroups.find((group) => group.slug === normalized) ?? catalogGroups[0];
 }
 
 function isBeginnerFriendly(item: CatalogItem) {
@@ -392,14 +415,17 @@ function isBeginnerFriendly(item: CatalogItem) {
 function CatalogGameCard({ item }: { item: CatalogItem }) {
   const system = catalogSystem(item.systemKey);
   const kind = item.gameType === 'campaign' ? 'Кампания' : 'Ваншот';
-  const format = item.format.trim() || 'Онлайн или очно';
-  const price = item.gameType === 'campaign' ? '1 000 руб.' : '1 500 руб.';
+  const format = catalogFormatLabel(item.format);
+  const price = item.price?.trim() || (item.gameType === 'campaign' ? '1 000 руб.' : '1 500 руб.');
+  const age = item.age?.trim() || 'Возраст уточняется';
+  const players = item.players?.trim() || '3–5 игроков';
+  const tags = Array.from(new Set([kind, age, format, ...(item.status?.trim() ? [item.status.trim()] : []), ...(item.tags ?? []), ...(isBeginnerFriendly(item) ? ['Подходит новичкам'] : [])]));
 
   return (
     <article className="catalog-game-card">
       <div className="catalog-game-cover" style={{ backgroundImage: `url(${system.artwork})` }}>
         {item.imageUrl && <img src={item.imageUrl} alt={`Обложка игры «${item.title}»`} loading="lazy" decoding="async" onError={(event) => { event.currentTarget.style.display = 'none'; }} />}
-        <div className="catalog-game-tags"><span>{kind}</span>{isBeginnerFriendly(item) && <span>Подходит новичкам</span>}</div>
+        <div className="catalog-game-tags">{tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
       </div>
       <div className="catalog-game-body">
         <span className="catalog-game-system">{system.title}</span>
@@ -407,10 +433,11 @@ function CatalogGameCard({ item }: { item: CatalogItem }) {
         <p>{item.description || 'Детали истории и тон игры обсудим перед записью.'}</p>
         <dl className="catalog-game-facts">
           <div><dt>Цена</dt><dd>{price}</dd></div>
-          <div><dt>Стол</dt><dd>3–5 игроков</dd></div>
+          <div><dt>Стол</dt><dd>{players}</dd></div>
           <div><dt>Формат</dt><dd>{format}</dd></div>
+          {item.duration && <div><dt>Длительность</dt><dd>{item.duration}</dd></div>}
         </dl>
-        <Link className="catalog-game-action" href={`/anketa?system=${encodeURIComponent(item.title)}`}>Узнать об игре <ArrowUpRight size={14} /></Link>
+        <Link className="catalog-game-action" href={`/anketa?gameId=${encodeURIComponent(item.id)}&game=${encodeURIComponent(item.title)}&system=${encodeURIComponent(item.systemKey)}`}>Узнать об игре <ArrowUpRight size={14} /></Link>
       </div>
     </article>
   );
@@ -419,8 +446,12 @@ function CatalogGameCard({ item }: { item: CatalogItem }) {
 function CatalogBrowser({ selectedSystem }: { selectedSystem?: string }) {
   const [kind, setKind] = useState<'all' | 'campaign' | 'oneshot'>('all');
   const { data, isLoading, isError, refetch } = useCatalog();
-  const items = (data?.items ?? []).filter((item) => (!selectedSystem || item.systemKey === selectedSystem) && (kind === 'all' || item.gameType === kind));
+  const items = (data?.items ?? []).filter((item) => (!selectedSystem || normalizeSystemKey(item.systemKey) === selectedSystem) && (kind === 'all' || item.gameType === kind));
   const selected = selectedSystem ? catalogGroups.find((group) => group.slug === selectedSystem) : undefined;
+  const groupedItems = catalogGroups
+    .filter((group) => group.slug !== 'cthulhu')
+    .map((group) => ({ group, items: items.filter((item) => normalizeSystemKey(item.systemKey) === group.slug) }))
+    .filter(({ items: groupItems }) => groupItems.length > 0);
 
   return (
     <section className="catalog-browser" aria-labelledby="catalog-list-title">
@@ -432,26 +463,25 @@ function CatalogBrowser({ selectedSystem }: { selectedSystem?: string }) {
           <button type="button" className={kind === 'campaign' ? 'is-active' : ''} onClick={() => setKind('campaign')}>Кампании</button>
         </div>
       </div>
-      <div className="catalog-manage-note">
-        <div><strong>Каталог можно менять без правки сайта</strong><span>В мастерской можно добавить игру, формат, описание и ссылку на обложку.</span></div>
-        <a href={`${MASTER_SITE}/master#catalog-editor`} target="_blank" rel="noreferrer">Управлять каталогом <ArrowUpRight size={14} /></a>
-      </div>
       {isLoading && <div className="calendar-state" role="status">Загружаем игры…</div>}
       {isError && <div className="calendar-state" role="alert"><h2>Каталог временно недоступен</h2><p>Не удалось получить актуальные карточки.</p><button className="button button-primary" onClick={() => refetch()}>Повторить</button></div>}
       {!isLoading && !isError && selectedSystem === 'cthulhu' && <div className="catalog-development-state">
         <img src="/assets/system-cthulhu.png" alt="Штормовое море и маяк" />
-        <div><span className="catalog-kicker">СИСТЕМА 02</span><h2>Зов Ктулху пока в разработке</h2><p>Новые игры появятся здесь, когда система будет готова к запуску.</p><Link href="/anketa" className="button button-ghost">Оставить пожелание</Link></div>
+        <div><span className="catalog-kicker">СИСТЕМА 05</span><h2>Зов Ктулху пока в разработке</h2><p>Новые игры появятся здесь, когда система будет готова к запуску.</p><Link href="/anketa" className="button button-ghost">Оставить пожелание</Link></div>
       </div>}
-      {!isLoading && !isError && selectedSystem !== 'cthulhu' && (items.length ? <div className="catalog-game-grid">
+      {!isLoading && !isError && selectedSystem !== 'cthulhu' && (items.length ? selectedSystem ? <div className="catalog-game-grid">
         {items.map((item) => <CatalogGameCard item={item} key={item.id} />)}
+      </div> : <div className="catalog-system-sections">
+        {groupedItems.map(({ group, items: groupItems }) => <section className="catalog-system-section" key={group.slug} aria-labelledby={`catalog-system-${group.slug}`}>
+          <div className="catalog-system-section-head"><div><span className="catalog-kicker">СИСТЕМА {group.number}</span><h3 id={`catalog-system-${group.slug}`}>{group.title}</h3></div><Link href={`/games?system=${group.slug}`}>Все игры <ArrowUpRight size={14} /></Link></div>
+          <div className="catalog-game-grid">{groupItems.map((item) => <CatalogGameCard item={item} key={item.id} />)}</div>
+        </section>)}
       </div> : <div className="calendar-state"><h2>Подходящих игр пока нет</h2><p>Смените фильтр или оставьте пожелание — подберём формат вместе.</p><Link href="/anketa" className="button button-primary">Оставить пожелание</Link></div>)}
     </section>
   );
 }
 
 function Home() {
-  const { games, isLoading, isError } = useLiveGames();
-  const nextGame = games.find((game) => canApply(game));
   return (
     <Shell>
       <main>
@@ -461,7 +491,7 @@ function Home() {
             <h1>Истории,<br /><em>в которые</em><br />входят</h1>
             <p className="hero-lead">Я — Никс. Веду камерные игры для тех, кому мало просто бросить кубик. Здесь у каждого решения есть цена, у каждого героя — тайна, а у каждой встречи — продолжение.</p>
             <div className="hero-actions">
-              <Link href="/calendar" className="button button-primary" data-testid="button-hero-calendar">Записаться на ближайшую игру <ArrowUpRight size={16} /></Link>
+              <Link href="/calendar" className="button button-primary" data-testid="button-hero-calendar">Посмотреть расписание <ArrowUpRight size={16} /></Link>
               <Link href="/games" className="button button-ghost" data-testid="button-hero-games">Подобрать игру</Link>
             </div>
             <div className="hero-note">
@@ -484,16 +514,7 @@ function Home() {
           <div className="signal"><span className="signal-icon">↗</span><span><strong>Москва</strong><br />и любой экран</span></div>
         </div>
 
-        <section className="section" id="next" data-testid="next-game-section">
-          <div className="section-head">
-            <div><div className="section-kicker">следующий портал</div><h2>Ближайшая<br />игра</h2></div>
-            <p className="section-intro">Место, с которого проще всего начать. Маленькая группа, готовый сюжет, понятная цена — остаётся только выбрать, кем войти в историю.</p>
-          </div>
-          {isLoading && <div className="calendar-state" role="status">Загружаю актуальный календарь…</div>}
-          {isError && <div className="calendar-state" role="alert">Не удалось загрузить ближайшую игру. Открой календарь, чтобы повторить попытку.</div>}
-          {!isLoading && !isError && nextGame && <GameFeature game={nextGame} />}
-          {!isLoading && !isError && !nextGame && <div className="calendar-state">Ближайших открытых игр пока нет. Оставьте заявку — подберём формат вместе.</div>}
-        </section>
+        <CatalogSection id="games" />
 
         <section className="section" id="about" data-testid="about-section">
           <div className="path-grid">
@@ -505,8 +526,6 @@ function Home() {
             </div>
           </div>
         </section>
-
-        <CatalogSection id="games" />
 
         <section className="section" data-testid="gallery-section">
           <div className="section-head"><div><div className="section-kicker">что остаётся за кадром</div><h2>Мир уже<br />ждёт тебя</h2></div><p className="section-intro">Карты, миниатюры, музыка, свечи и немного хаоса на столе. Всё, что помогает истории стать настоящей.</p></div>
@@ -549,58 +568,24 @@ function Home() {
   );
 }
 
-function GameFeature({ game }: { game: Game }) {
-  return (
-    <article className="next-game" data-testid={`feature-game-${game.id}`}>
-      <div className="next-game-image"><img src={game.image} alt={`Обложка ${game.title}`} loading="lazy" decoding="async" /></div>
-      <div className="next-game-content">
-        <span className="game-label">{game.status === 'waiting' ? 'ЛИСТ ОЖИДАНИЯ' : 'ОТКРЫТ НАБОР'} · {availabilityLabel(game)}</span>
-        <h3>{game.title}</h3>
-        <div className="game-meta">
-          <span><CalendarDays size={13} /> <b>{game.date}</b></span>
-          <span><Clock3 size={13} /> <b>{game.time}</b></span>
-          <span><Video size={13} /> <b>{game.place}</b></span>
-        </div>
-        <div className="price">{game.price} <small>/ игрок</small></div>
-        <Link href={`/anketa?event=${encodeURIComponent(game.eventId)}&date=${encodeURIComponent(game.dateISO)}`} className="button button-primary" data-testid={`button-apply-${game.id}`}>{game.status === 'waiting' ? 'Оставить заявку' : 'Забронировать место'} <ArrowUpRight size={15} /></Link>
-        <span className="availability">{game.spots}</span>
-      </div>
-    </article>
-  );
-}
-
 function Faq({ question, answer }: { question: string; answer: string }) {
   return <details className="faq-item"><summary data-testid={`faq-${question}`}>{question}</summary><p>{answer}</p></details>;
 }
 
 function CalendarPage() {
-  const { events, games: upcomingGames, isLoading, isError, refetch } = useLiveGames();
+  const { events, isLoading, isError, refetch } = useLiveGames();
   const today = todayInMoscow();
-  const hasPublishedEvents = events.some((event) => !event.archived);
-  const [weekStart, setWeekStart] = useState(() => startOfWeek(today));
   const [monthStart, setMonthStart] = useState(() => startOfMonth(today));
-  const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
   const [formatFilter, setFormatFilter] = useState('all');
   const [storyFilter, setStoryFilter] = useState('all');
   const [beginnersOnly, setBeginnersOnly] = useState(false);
-  const weekGames = useMemo(() => {
-    return expandEvents(events, weekStart, addDays(weekStart, 6)).filter((game) => {
-      const normalizedFormat = game.format.toLowerCase();
-      const experience = game.experience.toLowerCase();
-      const formatMatches = formatFilter === 'all' || (formatFilter === 'online' ? normalizedFormat.includes('online') : normalizedFormat.includes('offline'));
-      const storyMatches = storyFilter === 'all' || game.storyType === storyFilter;
-      const beginnerMatches = !beginnersOnly || !experience || /нович|любой|начин/.test(experience);
-      return formatMatches && storyMatches && beginnerMatches;
-    });
-  }, [beginnersOnly, events, formatFilter, storyFilter, weekStart]);
-  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => {
-    const date = addDays(weekStart, index);
-    return { date, label: weekDayLabels[index], name: formatDayName(date), games: weekGames.filter((game) => game.dateISO === date) };
-  }), [weekGames, weekStart]);
   const monthGrid = useMemo(() => {
     const gridStart = monthGridStart(monthStart);
-    const gridEnd = addDays(gridStart, 41);
-    const games = expandEvents(events, gridStart, gridEnd).filter((game) => {
+    const firstWeekdayOffset = Math.round((parseDateKey(monthStart).getTime() - parseDateKey(gridStart).getTime()) / 86400000);
+    const monthDays = new Date(Date.UTC(parseDateKey(monthStart).getUTCFullYear(), parseDateKey(monthStart).getUTCMonth() + 1, 0, 12)).getUTCDate();
+    const gridCellCount = Math.ceil((firstWeekdayOffset + monthDays) / 7) * 7;
+    const monthEnd = addDays(monthStart, monthDays - 1);
+    const games = expandEvents(events, monthStart, monthEnd).filter((game) => {
       const normalizedFormat = game.format.toLowerCase();
       const experience = game.experience.toLowerCase();
       const formatMatches = formatFilter === 'all' || (formatFilter === 'online' ? normalizedFormat.includes('online') : normalizedFormat.includes('offline'));
@@ -608,16 +593,13 @@ function CalendarPage() {
       const beginnerMatches = !beginnersOnly || !experience || /нович|любой|начин/.test(experience);
       return formatMatches && storyMatches && beginnerMatches;
     });
-    return Array.from({ length: 42 }, (_, index) => {
-      const date = addDays(gridStart, index);
+    return Array.from({ length: gridCellCount }, (_, index) => {
+      if (index < firstWeekdayOffset || index >= firstWeekdayOffset + monthDays) return null;
+      const date = addDays(monthStart, index - firstWeekdayOffset);
       return { date, label: weekDayLabels[index % 7], games: games.filter((game) => game.dateISO === date) };
     });
   }, [beginnersOnly, events, formatFilter, monthStart, storyFilter]);
-  const scheduledCount = (calendarView === 'week' ? weekGames : monthGrid.flatMap((day) => day.games)).filter((game) => !calendarOnlyStatuses.has(game.status)).length;
-
-  function moveWeek(offset: number) {
-    setWeekStart((current) => addDays(current, offset * 7));
-  }
+  const scheduledCount = monthGrid.flatMap((day) => day?.games ?? []).filter((game) => !calendarOnlyStatuses.has(game.status)).length;
 
   function moveMonth(offset: number) {
     setMonthStart((current) => {
@@ -632,43 +614,45 @@ function CalendarPage() {
       <main className="subpage calendar-page">
         <div className="calendar-hero reveal">
           <div className="eyebrow">единый календарь игр</div>
-          <h1>Вся неделя<br /><em>перед глазами</em></h1>
+          <h1>Весь месяц<br /><em>перед глазами</em></h1>
           <p>Здесь собраны открытые наборы, текущие кампании, детские группы, выходные и свободные слоты. Не нашли подходящую дату — <Link href="/anketa">оставьте пожелания</Link>.</p>
-        </div>
-        <div className="calendar-manage-note">
-          <div><strong>Как добавить игру</strong><span>Откройте мастерский календарь, войдите по паролю и нажмите «Добавить игру». Изменения появятся здесь автоматически.</span></div>
-          <a href={`${MASTER_SITE}/calendar`} target="_blank" rel="noreferrer">Добавить игру <ArrowUpRight size={14} /></a>
         </div>
         {isLoading && <div className="calendar-state" role="status">Загружаем расписание…</div>}
         {isError && <div className="calendar-state" role="alert"><h2>Календарь временно недоступен</h2><p>Не удалось получить актуальные даты. Попробуйте обновить список.</p><button className="button button-primary" onClick={() => refetch()}>Обновить календарь</button></div>}
-        {!isLoading && !isError && !hasPublishedEvents && !upcomingGames.length && <div className="calendar-state"><h2>Ближайших игр пока нет</h2><p>Оставьте заявку — я помогу подобрать формат и дату под вашу компанию.</p><Link href="/anketa" className="button button-primary">Оставить заявку <ArrowUpRight size={15} /></Link></div>}
-        {!isLoading && !isError && (hasPublishedEvents || upcomingGames.length > 0) && <section className="calendar-week" aria-labelledby="calendar-week-title">
+        {!isLoading && !isError && <section className="calendar-week" aria-labelledby="calendar-week-title">
           <div className="calendar-week-toolbar">
-            <div><h2 id="calendar-week-title">Расписание на {calendarView === 'week' ? 'неделю' : 'месяц'}</h2><p>Время московское · открытые наборы и ближайшие встречи</p></div>
+            <div><h2 id="calendar-week-title">Расписание на месяц</h2><p>Время московское · открытые наборы и ближайшие встречи</p></div>
               <div className="calendar-week-nav" aria-label="Навигация по расписанию">
-              <button type="button" onClick={() => calendarView === 'week' ? moveWeek(-1) : moveMonth(-1)} aria-label="Назад">←</button>
-              <button type="button" className="calendar-week-current" onClick={() => { setWeekStart(startOfWeek(today)); setMonthStart(startOfMonth(today)); }}>Сегодня</button>
-              <button type="button" onClick={() => calendarView === 'week' ? moveWeek(1) : moveMonth(1)} aria-label="Вперёд">→</button>
+              <button type="button" onClick={() => moveMonth(-1)} aria-label="Назад">←</button>
+              <button type="button" className="calendar-week-current" onClick={() => setMonthStart(startOfMonth(today))}>Сегодня</button>
+              <button type="button" onClick={() => moveMonth(1)} aria-label="Вперёд">→</button>
             </div>
           </div>
-          <div className="calendar-week-meta"><span>{calendarView === 'week' ? formatWeekRange(weekStart) : monthLabel(monthStart)}</span><strong>В расписании: {scheduledCount}</strong></div>
-          <div className="calendar-view-switch" role="group" aria-label="Вид расписания"><button type="button" className={calendarView === 'week' ? 'is-active' : ''} onClick={() => setCalendarView('week')}>Неделя</button><button type="button" className={calendarView === 'month' ? 'is-active' : ''} onClick={() => setCalendarView('month')}>Месяц</button></div>
+          <div className="calendar-week-meta"><span>{monthLabel(monthStart)}</span><strong>В расписании: {scheduledCount}</strong></div>
           <div className="calendar-filters">
             <label><span>Где играем</span><select value={formatFilter} onChange={(event) => setFormatFilter(event.target.value)}><option value="all">Любой формат</option><option value="online">Онлайн</option><option value="offline">Очно в Москве</option></select></label>
             <label><span>Длина истории</span><select value={storyFilter} onChange={(event) => setStoryFilter(event.target.value)}><option value="all">Ваншоты и кампании</option><option value="oneshot">Ваншот — одна встреча</option><option value="campaign">Кампания — серия встреч</option></select></label>
             <label className="calendar-check"><input type="checkbox" checked={beginnersOnly} onChange={(event) => setBeginnersOnly(event.target.checked)} /><span>Подходит новичкам</span></label>
           </div>
-          {calendarView === 'week' ? <div className="calendar-week-grid">
-            {weekDays.map((day) => <section className={`calendar-day${day.date === today ? ' is-today' : ''}${day.date < today ? ' is-past' : ''}`} key={day.date} aria-labelledby={`calendar-day-${day.date}`}>
-              <header className="calendar-day-head"><div><span>{day.label}</span><strong>{parseDateKey(day.date).getUTCDate()}</strong></div><small id={`calendar-day-${day.date}`}>{day.name}</small></header>
-              <div className="calendar-day-body">{day.games.length ? day.games.map((game) => <WeeklyGame game={game} key={game.id} />) : <p className="calendar-day-empty">Свободный день</p>}</div>
-            </section>)}
-          </div> : <div className="calendar-month-grid">
-            {monthGrid.map((day) => <section className={`calendar-month-day${day.date.slice(0, 7) !== monthStart.slice(0, 7) ? ' is-outside' : ''}${day.date === today ? ' is-today' : ''}`} key={day.date}>
-              <header><span>{day.label}</span><strong>{parseDateKey(day.date).getUTCDate()}</strong></header>
-              <div>{day.games.map((game) => <WeeklyGame game={game} key={game.id} />)}</div>
-            </section>)}
-          </div>}
+          <div className="calendar-month-scroll" aria-label={`Календарь на ${monthLabel(monthStart)}`}>
+            <div className="calendar-month-grid">
+              {monthGrid.map((day, index) => day ? <section className={`calendar-month-day${day.date === today ? ' is-today' : ''}`} key={day.date}>
+                <header><span>{day.label}</span><strong>{parseDateKey(day.date).getUTCDate()}</strong></header>
+                <div>{day.games.map((game) => <WeeklyGame game={game} key={game.id} />)}</div>
+              </section> : <div className="calendar-month-day is-empty" aria-hidden="true" key={`empty-${index}`} />)}
+            </div>
+          </div>
+        </section>}
+        {!isLoading && !isError && <section className="calendar-actions-bottom" aria-label="Действия с расписанием" data-testid="calendar-bottom-actions">
+          <div>
+            <span className="catalog-kicker">СЛЕДУЮЩИЙ ШАГ</span>
+            <h2>Нашли свой слот?</h2>
+            <p>Запишитесь на открытую игру или добавьте новую встречу в мастерском календаре.</p>
+          </div>
+          <div className="calendar-actions-buttons">
+            <Link href="/anketa" className="button button-primary">Записаться на игру <ArrowUpRight size={15} /></Link>
+            <Link href="/master/calendar" className="button button-ghost">Добавить игру <ArrowUpRight size={15} /></Link>
+          </div>
         </section>}
       </main>
     </Shell>
@@ -691,13 +675,14 @@ function WeeklyGame({ game }: { game: Game }) {
 }
 
 function GamesPage() {
-  const requestedSystem = new URLSearchParams(window.location.search).get('system') ?? '';
-  const selectedSystem = catalogGroups.some((group) => group.slug === requestedSystem) ? requestedSystem : undefined;
+  const search = useSearch();
+  const requestedSystem = new URLSearchParams(search).get('system') ?? '';
+  const normalizedSystem = normalizeSystemKey(requestedSystem);
+  const selectedSystem = catalogGroups.some((group) => group.slug === normalizedSystem) ? normalizedSystem : undefined;
 
   return (
     <Shell>
       <main className="subpage catalog-page">
-        <CatalogSection id="catalog" selectedSystem={selectedSystem} />
         <CatalogBrowser selectedSystem={selectedSystem} />
       </main>
     </Shell>
@@ -705,12 +690,20 @@ function GamesPage() {
 }
 
 function ApplicationPage() {
-  const searchParams = new URLSearchParams(window.location.search);
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  const searchParams = new URLSearchParams(search);
   const eventId = searchParams.get('event') ?? '';
   const occurrenceDate = searchParams.get('date') ?? '';
+  const requestedGameId = searchParams.get('gameId') ?? '';
+  const requestedGame = searchParams.get('game') ?? '';
   const requestedSystem = searchParams.get('system') ?? '';
+  const requestedCatalogSystem = catalogGroups.find((group) => group.slug === normalizeSystemKey(requestedSystem))?.title ?? requestedSystem;
   const hasSelection = Boolean(eventId && occurrenceDate);
   const { games, isLoading: isGamesLoading } = useLiveGames();
+  const catalogQuery = useCatalog();
+  const catalogItems = catalogQuery.data?.items ?? [];
+  const [gameChoice, setGameChoice] = useState('custom');
   const selectionQuery = useGetApplicationSelection(
     { event: eventId, date: occurrenceDate },
     { query: { queryKey: ['/api/applications', eventId, occurrenceDate], enabled: hasSelection, staleTime: 0, refetchOnMount: true } },
@@ -718,17 +711,19 @@ function ApplicationPage() {
   const submitMutation = useSubmitApplication();
   const [sent, setSent] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [stepError, setStepError] = useState('');
+  const [step, setStep] = useState<1 | 2>(1);
   const [consent, setConsent] = useState(false);
   const [submissionId] = useState(() => crypto.randomUUID());
   const [form, setForm] = useState({
     name: '',
     contact: '',
     players: '1',
-    game: '',
+    game: requestedGame || 'Подобрать игру вместе',
     format: 'Пока не знаю',
     place: 'Готовы обсудить',
     experience: '',
-    system: requestedSystem,
+    system: requestedCatalogSystem,
     genres: '',
     tone: '',
     wishes: '',
@@ -739,12 +734,96 @@ function ApplicationPage() {
   const selectedGame: GameSelection | undefined = selectionQuery.data?.game;
 
   useEffect(() => {
+    if (eventId && occurrenceDate) {
+      setGameChoice(`event:${eventId}:${occurrenceDate}`);
+      return;
+    }
+    if (requestedGame) {
+      const catalogItem = catalogItems.find((item) => requestedGameId ? item.id === requestedGameId : item.title === requestedGame && normalizeSystemKey(item.systemKey) === normalizeSystemKey(requestedSystem));
+      const calendarGame = games.find((game) => game.title === requestedGame);
+      setGameChoice(catalogItem ? `catalog:${catalogItem.id}` : calendarGame ? `event:${calendarGame.eventId}:${calendarGame.dateISO}` : `custom:${requestedGame}`);
+      return;
+    }
+    setGameChoice('custom');
+  }, [catalogItems, eventId, occurrenceDate, requestedGame, requestedGameId, requestedSystem, games]);
+
+  useEffect(() => {
     if (selectedGame) {
-      setForm((current) => ({ ...current, game: selectedGame.title }));
+      setForm((current) => ({
+        ...current,
+        game: selectedGame.title,
+        schedule: current.schedule || `${selectedGame.dateLabel}, ${selectedGame.time}`,
+      }));
     }
   }, [selectedGame]);
 
-  const update = (key: keyof typeof form, value: string) => setForm((current) => ({ ...current, [key]: value }));
+  useEffect(() => {
+    if (!selectedGame && requestedGame) {
+      setForm((current) => ({ ...current, game: requestedGame, system: requestedCatalogSystem }));
+    } else if (!selectedGame && !requestedGame && !eventId) {
+      setForm((current) => ({ ...current, game: 'Подобрать игру вместе', system: '' }));
+    }
+  }, [eventId, requestedCatalogSystem, requestedGame, selectedGame]);
+
+  const update = (key: keyof typeof form, value: string) => {
+    setStepError('');
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const selectGame = (value: string) => {
+    setStepError('');
+    setGameChoice(value);
+    if (value.startsWith('event:')) {
+      const [, selectedEventId, selectedDate] = value.split(':');
+      if (selectedEventId && selectedDate) navigate(`/anketa?event=${encodeURIComponent(selectedEventId)}&date=${encodeURIComponent(selectedDate)}`);
+      return;
+    }
+    if (value.startsWith('catalog:')) {
+      const catalogItem = catalogItems.find((item) => item.id === value.slice('catalog:'.length));
+      if (catalogItem) {
+        navigate(`/anketa?gameId=${encodeURIComponent(catalogItem.id)}&game=${encodeURIComponent(catalogItem.title)}&system=${encodeURIComponent(catalogItem.systemKey)}`);
+        return;
+      }
+    }
+    update('game', 'Подобрать игру вместе');
+    update('system', '');
+    navigate('/anketa');
+  };
+
+  function goToSecondStep() {
+    setStepError('');
+    if (selectionQuery.isLoading) {
+      setStepError('Подождите, я проверяю выбранную игру.');
+      return;
+    }
+    if (selectionQuery.isError) {
+      setStepError('Выбранная дата больше недоступна. Вернитесь в календарь и выберите актуальную игру.');
+      return;
+    }
+    if (!form.name.trim()) {
+      setStepError('Укажите имя или ник.');
+      return;
+    }
+    if (!form.contact.trim()) {
+      setStepError('Оставьте Telegram для связи.');
+      return;
+    }
+    if (!selectedGame && !form.game.trim()) {
+      setStepError('Выберите игру или отметьте, что хотите обсудить идею.');
+      return;
+    }
+    if (!form.schedule.trim()) {
+      setStepError('Напишите, когда вам удобно играть.');
+      return;
+    }
+    setStep(2);
+  }
+
+  function goToFirstStep() {
+    setStepError('');
+    setSubmitError('');
+    setStep(1);
+  }
 
   function getErrorMessage(error: unknown) {
     if (error && typeof error === 'object' && 'data' in error) {
@@ -757,12 +836,18 @@ function ApplicationPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitError('');
+    if (step !== 2) return;
+    const players = Number(form.players);
+    if (!Number.isInteger(players) || players < 1 || players > 20) {
+      setStepError('Количество игроков должно быть от 1 до 20.');
+      return;
+    }
     const payload: ApplicationInput = {
       submissionId,
       name: form.name.trim(),
       contact: form.contact.trim(),
-      players: Number(form.players),
-      format: selectedGame ? 'Выбранная игра' : form.format,
+      players,
+      format: form.format,
       place: selectedGame ? selectedGame.place : form.place,
       experience: form.experience,
       system: form.system || (selectedGame ? selectedGame.title : form.game),
@@ -795,14 +880,27 @@ function ApplicationPage() {
       <main className="subpage">
         <div className="subpage-head reveal"><div className="eyebrow">первый шаг</div><h1>Вход<br />в <em style={{ color: '#ff716a', fontStyle: 'normal' }}>историю</em></h1><p className="subpage-lead">Расскажи, что ищешь за игровым столом. Анкета ни к чему не обязывает — она помогает мне собрать хорошую группу, где всем будет интересно.</p></div>
         <div className="form-layout">
-          <aside className="form-aside"><div className="section-kicker">Что будет дальше</div><p>В течение суток я отвечу тебе в Telegram: уточню детали, расскажу о выбранной игре и познакомлю с форматом.</p><p>Можно написать с нулевым опытом, с готовым персонажем или с идеей, которую давно хочется сыграть.</p><img src="/assets/cards.jpg" alt="Карты для игры" loading="lazy" decoding="async" data-testid="img-application-aside" /></aside>
-          <div className="form-card">
-             {sent ? <div className="success-card" data-testid="application-success"><Check size={25} color="#d8ff55" /><h2>Заявка отправлена</h2><p>Спасибо, {form.name}. Заявка дошла до Никс — она ответит в Telegram в течение суток.</p><div className="hero-actions"><a href="https://t.me/mad_maze_elle" target="_blank" rel="noreferrer" className="button button-primary" data-testid="button-success-telegram">Открыть Telegram <ArrowUpRight size={15} /></a><Link href="/calendar" className="button button-ghost" data-testid="button-success-calendar">Посмотреть календарь <ArrowUpRight size={15} /></Link></div></div> : <form onSubmit={submit} data-testid="application-form"><h2>{selectedGame ? <>Заявка<br />на игру</> : <>Пара вопросов<br />перед броском</>}</h2>
-               {selectionQuery.isLoading && <div className="form-status" role="status">Проверяю выбранную игру…</div>}
-               {selectionQuery.isError && <div className="form-status error" role="alert">Не удалось проверить выбранную игру. Вернитесь в календарь и выберите актуальную дату.</div>}
-               {selectedGame && <div className="selected-game" data-testid="selected-game"><span className="section-kicker">Вы выбрали</span><strong>{selectedGame.title}</strong><span>{selectedGame.dateLabel} · {selectedGame.time} · {selectedGame.place}</span><small>{selectedGame.price} · {selectedGame.location}</small></div>}
-               <div className="field-grid"><div className="field"><label htmlFor="name">Как тебя зовут *</label><input id="name" value={form.name} onChange={(event) => update('name', event.target.value)} placeholder="Имя или ник" required data-testid="input-name" /></div><div className="field"><label htmlFor="telegram">Telegram *</label><input id="telegram" value={form.contact} onChange={(event) => update('contact', event.target.value)} placeholder="@username" required data-testid="input-telegram" /></div><div className="field"><label htmlFor="players">Сколько будет игроков *</label><input id="players" type="number" min="1" max="20" value={form.players} onChange={(event) => update('players', event.target.value)} required data-testid="input-players" /></div>{!selectedGame && <div className="field"><label htmlFor="game">Какая игра интересует</label><select id="game" value={form.game} onChange={(event) => update('game', event.target.value)} data-testid="select-game"><option value="">Хочу обсудить свою идею</option>{games.map((game) => <option key={`${game.id}-${game.dateISO}`} value={game.title}>{game.title} · {game.date}</option>)}</select></div>}<div className="field"><label htmlFor="format">Формат</label><select id="format" value={form.format} onChange={(event) => update('format', event.target.value)}><option>Ваншот на одну встречу</option><option>Небольшое приключение</option><option>Долгая кампания</option><option>Пока не знаю</option></select></div><div className="field"><label htmlFor="place">Онлайн или офлайн</label><select id="place" value={form.place} onChange={(event) => update('place', event.target.value)}><option>Онлайн</option><option>Офлайн в Москве</option><option>Готовы обсудить</option></select></div><div className="field full"><label htmlFor="experience">Игровой опыт</label><input id="experience" value={form.experience} onChange={(event) => update('experience', event.target.value)} placeholder="Например: совсем новичок или играю 3 года" /></div><div className="field full"><label htmlFor="system">Система или жанр</label><input id="system" value={form.system} onChange={(event) => update('system', event.target.value)} placeholder="Например: D&D 5e, мистика, хоррор" /></div><div className="field full"><label htmlFor="wishes">Что хочется получить от игры</label><textarea id="wishes" value={form.wishes} onChange={(event) => update('wishes', event.target.value)} placeholder="Больше драмы? Исследований? Дурацких шуток в опасном подземелье?" /></div><div className="field full"><label htmlFor="schedule">Когда удобно играть</label><textarea id="schedule" value={form.schedule} onChange={(event) => update('schedule', event.target.value)} placeholder="Дни недели, время, желаемая частота" /></div></div><div className="form-honeypot" aria-hidden="true"><label htmlFor="website">Не заполняйте это поле</label><input id="website" name="website" value={form.website} onChange={(event) => update('website', event.target.value)} tabIndex={-1} autoComplete="off" /></div><label className="consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} required /><span>Я согласна, что мои ответы и контакт будут отправлены мастеру в Telegram для обсуждения игры.</span></label>{submitError && <div className="form-status error" role="alert">{submitError} Можно <a href="https://t.me/mad_maze_elle" target="_blank" rel="noreferrer">написать мастеру в Telegram</a>.</div>}<button className="button button-primary" type="submit" disabled={submitMutation.isPending || selectionQuery.isLoading || Boolean(selectionQuery.isError) || !consent} data-testid="button-submit-application">{submitMutation.isPending ? 'Отправляю…' : 'Отправить заявку мастеру'} <ArrowUpRight size={15} /></button></form>}
-          </div>
+           <aside className="form-aside"><div className="section-kicker">Что будет дальше</div><p>В течение суток я отвечу тебе в Telegram: уточню детали, расскажу о выбранной игре и познакомлю с форматом.</p><p>Можно написать с нулевым опытом, с готовым персонажем или с идеей, которую давно хочется сыграть.</p><img src="/assets/table.jpg" alt="Игровой стол с кубиками и листами персонажей" loading="lazy" decoding="async" data-testid="img-application-aside" /></aside>
+           <div className="form-card">
+              {sent ? <div className="success-card" data-testid="application-success"><Check size={25} color="#d8ff55" /><h2>Заявка отправлена</h2><p>Спасибо, {form.name}. Заявка дошла до Никс — она ответит в Telegram в течение суток.</p><div className="hero-actions"><a href="https://t.me/mad_maze_elle" target="_blank" rel="noreferrer" className="button button-primary" data-testid="button-success-telegram">Открыть Telegram <ArrowUpRight size={15} /></a><Link href="/calendar" className="button button-ghost" data-testid="button-success-calendar">Посмотреть календарь <ArrowUpRight size={15} /></Link></div></div> : <form onSubmit={submit} data-testid="application-form">
+                <div className="form-card-head"><div><span className="section-kicker">короткая анкета</span><h2>{selectedGame ? <>Заявка<br />на игру</> : <>Пара вопросов<br />перед броском</>}</h2></div><div className="form-step-indicator" aria-label={`Шаг ${step} из 2`}><span className={step === 1 ? 'is-active' : ''}>01<br /><small>контакт</small></span><i aria-hidden="true" /><span className={step === 2 ? 'is-active' : ''}>02<br /><small>детали</small></span></div></div>
+                {selectionQuery.isLoading && <div className="form-status" role="status">Проверяю выбранную игру…</div>}
+                {selectionQuery.isError && <div className="form-status error" role="alert">Не удалось проверить выбранную игру. Вернитесь в календарь и выберите актуальную дату.</div>}
+                {selectedGame && <div className="selected-game" data-testid="selected-game"><span className="section-kicker">Вы выбрали</span><strong>{selectedGame.title}</strong><span>{selectedGame.dateLabel} · {selectedGame.time} · {selectedGame.place}</span><small>{selectedGame.price} · {selectedGame.location}</small></div>}
+                 {step === 1 ? <>
+                   <div className="field-grid" data-testid="form-step-1"><div className="field"><label htmlFor="name">Как тебя зовут *</label><input id="name" value={form.name} onChange={(event) => update('name', event.target.value)} placeholder="Имя или ник" required data-testid="input-name" /></div><div className="field"><label htmlFor="telegram">Telegram *</label><input id="telegram" value={form.contact} onChange={(event) => update('contact', event.target.value)} placeholder="@username" required data-testid="input-telegram" /></div>{!selectedGame && <div className="field"><label htmlFor="game">Какая игра интересует *</label><select id="game" value={gameChoice} onChange={(event) => selectGame(event.target.value)} disabled={isGamesLoading || catalogQuery.isLoading} required data-testid="select-game"><option value="custom">Хочу обсудить свою идею</option>{catalogItems.map((item) => <option key={`catalog-${item.id}`} value={`catalog:${item.id}`}>{item.title} · {catalogSystem(item.systemKey).title}</option>)}{games.filter(canApply).map((game) => <option key={`${game.id}-${game.dateISO}`} value={`event:${game.eventId}:${game.dateISO}`}>{game.title} · {game.date}</option>)}{!['custom', ...catalogItems.map((item) => `catalog:${item.id}`), ...games.filter(canApply).map((game) => `event:${game.eventId}:${game.dateISO}`)].includes(gameChoice) && form.game !== 'Подобрать игру вместе' && <option value={gameChoice}>{form.game}</option>}</select></div>}<div className="field"><label htmlFor="place">Формат участия</label><select id="place" value={form.place} onChange={(event) => update('place', event.target.value)}><option>Онлайн</option><option>Очно в Москве</option><option>Готовы обсудить</option></select></div><div className="field full"><label htmlFor="schedule">Когда удобно играть *</label><textarea id="schedule" value={form.schedule} onChange={(event) => update('schedule', event.target.value)} placeholder="Дни недели, время, желаемая частота" required /></div></div>
+                  {stepError && <div className="form-status error" role="alert">{stepError}</div>}
+                  <div className="form-step-actions form-step-actions-next"><button className="button button-primary" type="button" onClick={goToSecondStep} data-testid="button-next-step">Дальше: детали <ArrowUpRight size={15} /></button></div>
+                </> : <>
+                  <div className="field-grid" data-testid="form-step-2"><div className="field"><label htmlFor="players">Сколько будет игроков *</label><input id="players" type="number" min="1" max="20" value={form.players} onChange={(event) => update('players', event.target.value)} required data-testid="input-players" /></div><div className="field"><label htmlFor="format">Тип игры</label><select id="format" value={form.format} onChange={(event) => update('format', event.target.value)}><option>Ваншот на одну встречу</option><option>Небольшое приключение</option><option>Долгая кампания</option><option>Пока не знаю</option></select></div><div className="field"><label htmlFor="experience">Игровой опыт</label><input id="experience" value={form.experience} onChange={(event) => update('experience', event.target.value)} placeholder="Например: совсем новичок или играю 3 года" /></div><div className="field"><label htmlFor="system">Система или жанр</label><input id="system" value={form.system} onChange={(event) => update('system', event.target.value)} placeholder="Например: D&D 5e, мистика, хоррор" /></div><div className="field"><label htmlFor="genres">Любимые жанры</label><input id="genres" value={form.genres} onChange={(event) => update('genres', event.target.value)} placeholder="Фэнтези, хоррор, детектив…" /></div><div className="field"><label htmlFor="tone">Желаемый тон</label><input id="tone" value={form.tone} onChange={(event) => update('tone', event.target.value)} placeholder="Больше драмы, юмора или экшена" /></div><div className="field full"><label htmlFor="wishes">Что хочется получить от игры</label><textarea id="wishes" value={form.wishes} onChange={(event) => update('wishes', event.target.value)} placeholder="Больше драмы? Исследований? Дурацких шуток в опасном подземелье?" /></div><div className="field full"><label htmlFor="boundaries">Границы и дополнительные детали</label><textarea id="boundaries" value={form.boundaries} onChange={(event) => update('boundaries', event.target.value)} placeholder="Темы, которых лучше избегать, или всё, что важно знать заранее" /></div></div>
+                  <div className="form-honeypot" aria-hidden="true"><label htmlFor="website">Не заполняйте это поле</label><input id="website" name="website" value={form.website} onChange={(event) => update('website', event.target.value)} tabIndex={-1} autoComplete="off" /></div>
+                  <label className="consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} required /><span>Я согласна, что мои ответы и контакт будут отправлены мастеру в Telegram для обсуждения игры.</span></label>
+                  {stepError && <div className="form-status error" role="alert">{stepError}</div>}
+                  {submitError && <div className="form-status error" role="alert">{submitError} Можно <a href="https://t.me/mad_maze_elle" target="_blank" rel="noreferrer">написать мастеру в Telegram</a>.</div>}
+                  <div className="form-step-actions"><button className="button button-ghost" type="button" onClick={goToFirstStep} data-testid="button-prev-step">Назад</button><button className="button button-primary" type="submit" disabled={submitMutation.isPending || selectionQuery.isLoading || Boolean(selectionQuery.isError) || !consent} data-testid="button-submit-application">{submitMutation.isPending ? 'Отправляю…' : 'Отправить заявку'} <ArrowUpRight size={15} /></button></div>
+                </>}
+              </form>}
+           </div>
         </div>
       </main>
     </Shell>

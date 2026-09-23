@@ -27,5 +27,10 @@ export interface CalendarEvent {
   archived: boolean;
   applicationUrl: string;
   recurrence: string;
+  /**
+     * @nullable
+     * @pattern ^[0-9]{4}-[0-9]{2}-[0-9]{2}$
+     */
+  recurrenceUntil: string | null;
   excludedDates: string[];
 }
