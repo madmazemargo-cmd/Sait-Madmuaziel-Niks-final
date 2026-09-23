@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type AnchorHTMLAttributes, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { ArrowUpRight, Check, Menu, X } from 'lucide-react';
 import { Link, Route, Switch, Router as WouterRouter, useLocation, useSearch } from 'wouter';
@@ -118,7 +118,8 @@ function monthGridStart(value: string) {
 }
 
 function monthLabel(value: string) {
-  return new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(parseDateKey(value));
+  const label = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(parseDateKey(value));
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function formatSpots(seats: number | null) {
@@ -217,10 +218,41 @@ function useLiveGames() {
   return { ...query, events, games };
 }
 
+type HomeSectionLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> & { sectionId: string };
+
+function preferredScrollBehavior(): ScrollBehavior {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+}
+
+function HomeSectionLink({ sectionId, onClick, children, ...props }: HomeSectionLinkProps) {
+  const [location, navigate] = useLocation();
+  const target = `/#${sectionId}`;
+
+  function handleClick(event: ReactMouseEvent<HTMLAnchorElement>) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    onClick?.(event);
+    if (event.defaultPrevented) return;
+    event.preventDefault();
+    navigate(target, { transition: true });
+
+    const scrollToSection = () => {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: preferredScrollBehavior(), block: 'start' });
+    };
+    // A cross-page navigation needs one render before the target section exists.
+    requestAnimationFrame(() => {
+      scrollToSection();
+      if (location !== '/') requestAnimationFrame(scrollToSection);
+    });
+  }
+
+  return <a {...props} href={target} onClick={handleClick}>{children}</a>;
+}
+
 function Header() {
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
+  const pathname = location.split(/[?#]/, 1)[0].replace(/\/+$/, '') || '/';
 
   useEffect(() => {
     if (!open) return;
@@ -241,10 +273,10 @@ function Header() {
         {open ? <X size={17} aria-hidden="true" /> : <Menu size={17} aria-hidden="true" />}
       </button>
       <nav id="main-navigation" className={`nav-links ${open ? 'open' : ''}`} aria-label="Основная навигация">
-        <Link href="/games" className={`nav-link ${location === '/games' ? 'active' : ''}`} onClick={close} data-testid="link-games">Игры</Link>
-        <Link href="/calendar" className={`nav-link ${location === '/calendar' ? 'active' : ''}`} onClick={close} data-testid="link-calendar">Календарь</Link>
-        <a href="/#about" className="nav-link" onClick={close} data-testid="link-about">Как это работает</a>
-        <a href="/#faq" className="nav-link" onClick={close} data-testid="link-faq">FAQ</a>
+        <Link href="/games" className={`nav-link ${pathname === '/games' ? 'active' : ''}`} onClick={close} data-testid="link-games">Игры</Link>
+        <Link href="/calendar" className={`nav-link ${pathname === '/calendar' || pathname === '/calendar/week' ? 'active' : ''}`} onClick={close} data-testid="link-calendar">Календарь</Link>
+        <HomeSectionLink sectionId="about" className="nav-link" onClick={close} data-testid="link-about">Как это работает</HomeSectionLink>
+        <HomeSectionLink sectionId="faq" className="nav-link" onClick={close} data-testid="link-faq">FAQ</HomeSectionLink>
         <Link href="/anketa" className="nav-cta" onClick={close} data-testid="link-nav-apply">Записаться <ArrowUpRight size={14} /></Link>
       </nav>
     </header>
@@ -572,91 +604,92 @@ function Faq({ question, answer }: { question: string; answer: string }) {
   return <details className="faq-item"><summary data-testid={`faq-${question}`}>{question}</summary><p>{answer}</p></details>;
 }
 
-function CalendarPage() {
-  const { events, isLoading, isError, refetch } = useLiveGames();
+type CalendarView = 'month' | 'week';
+
+function CalendarPage({ initialView = 'month' }: { initialView?: CalendarView }) {
+  const { events, games: upcomingGames, isLoading, isError, refetch } = useLiveGames();
   const today = todayInMoscow();
+  const [view, setView] = useState<CalendarView>(initialView);
   const [monthStart, setMonthStart] = useState(() => startOfMonth(today));
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(today));
   const [formatFilter, setFormatFilter] = useState('all');
   const [storyFilter, setStoryFilter] = useState('all');
   const [beginnersOnly, setBeginnersOnly] = useState(false);
-  const monthGrid = useMemo(() => {
-    const gridStart = monthGridStart(monthStart);
-    const firstWeekdayOffset = Math.round((parseDateKey(monthStart).getTime() - parseDateKey(gridStart).getTime()) / 86400000);
-    const monthDays = new Date(Date.UTC(parseDateKey(monthStart).getUTCFullYear(), parseDateKey(monthStart).getUTCMonth() + 1, 0, 12)).getUTCDate();
-    const gridCellCount = Math.ceil((firstWeekdayOffset + monthDays) / 7) * 7;
-    const monthEnd = addDays(monthStart, monthDays - 1);
-    const games = expandEvents(events, monthStart, monthEnd).filter((game) => {
-      const normalizedFormat = game.format.toLowerCase();
-      const experience = game.experience.toLowerCase();
-      const formatMatches = formatFilter === 'all' || (formatFilter === 'online' ? normalizedFormat.includes('online') : normalizedFormat.includes('offline'));
-      const storyMatches = storyFilter === 'all' || game.storyType === storyFilter;
-      const beginnerMatches = !beginnersOnly || !experience || /нович|любой|начин/.test(experience);
-      return formatMatches && storyMatches && beginnerMatches;
-    });
-    return Array.from({ length: gridCellCount }, (_, index) => {
-      if (index < firstWeekdayOffset || index >= firstWeekdayOffset + monthDays) return null;
-      const date = addDays(monthStart, index - firstWeekdayOffset);
-      return { date, label: weekDayLabels[index % 7], games: games.filter((game) => game.dateISO === date) };
-    });
-  }, [beginnersOnly, events, formatFilter, monthStart, storyFilter]);
-  const scheduledCount = monthGrid.flatMap((day) => day?.games ?? []).filter((game) => !calendarOnlyStatuses.has(game.status)).length;
+  const filterGames = (games: Game[]) => games.filter((game) => {
+    const normalizedFormat = game.format.toLowerCase();
+    const experience = game.experience.toLowerCase();
+    const formatMatches = formatFilter === 'all' || (formatFilter === 'online' ? normalizedFormat.includes('online') : normalizedFormat.includes('offline'));
+    const storyMatches = storyFilter === 'all' || game.storyType === storyFilter;
+    const beginnerMatches = !beginnersOnly || !experience || /нович|любой|начин/.test(experience);
+    return formatMatches && storyMatches && beginnerMatches;
+  });
+  const monthStartDate = monthGridStart(monthStart);
+  const monthGames = useMemo(() => filterGames(expandEvents(events, monthStartDate, addDays(monthStartDate, 41))), [beginnersOnly, events, formatFilter, monthStartDate, storyFilter]);
+  const monthGamesByDate = useMemo(() => {
+    const grouped = new Map<string, Game[]>();
+    monthGames.forEach((game) => grouped.set(game.dateISO, [...(grouped.get(game.dateISO) ?? []), game]));
+    return grouped;
+  }, [monthGames]);
+  const monthGrid = useMemo(() => Array.from({ length: 42 }, (_, index) => {
+    const date = addDays(monthStartDate, index);
+    return { date, games: monthGamesByDate.get(date) ?? [] };
+  }), [monthGamesByDate, monthStartDate]);
+  const weekGames = useMemo(() => filterGames(expandEvents(events, weekStart, addDays(weekStart, 6))), [beginnersOnly, events, formatFilter, storyFilter, weekStart]);
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => {
+    const date = addDays(weekStart, index);
+    return { date, label: weekDayLabels[index], name: formatDayName(date), games: weekGames.filter((game) => game.dateISO === date) };
+  }), [weekGames, weekStart]);
+  const monthScheduledCount = monthGames.filter((game) => game.dateISO.slice(0, 7) === monthStart.slice(0, 7) && !calendarOnlyStatuses.has(game.status)).length;
+  const scheduledCount = view === 'month' ? monthScheduledCount : weekGames.filter((game) => !calendarOnlyStatuses.has(game.status)).length;
 
   function moveMonth(offset: number) {
-    setMonthStart((current) => {
-      const date = parseDateKey(current);
-      date.setUTCMonth(date.getUTCMonth() + offset);
-      return startOfMonth(dateKeyFromDate(date));
-    });
+    setMonthStart((current) => { const date = parseDateKey(current); date.setUTCMonth(date.getUTCMonth() + offset); return startOfMonth(dateKeyFromDate(date)); });
   }
+  function moveWeek(offset: number) { setWeekStart((current) => addDays(current, offset * 7)); }
+  function showToday() { setMonthStart(startOfMonth(today)); setWeekStart(startOfWeek(today)); }
 
   return (
     <Shell>
       <main className="subpage calendar-page">
         <div className="calendar-hero reveal">
           <div className="eyebrow">единый календарь игр</div>
-          <h1>Весь месяц<br /><em>перед глазами</em></h1>
+          <h1>{view === 'month' ? <>Весь месяц<br /><em>перед глазами</em></> : <>Неделя<br /><em>перед глазами</em></>}</h1>
           <p>Здесь собраны открытые наборы, текущие кампании, детские группы, выходные и свободные слоты. Не нашли подходящую дату — <Link href="/anketa">оставьте пожелания</Link>.</p>
+        </div>
+        <div className="calendar-view-switch" role="tablist" aria-label="Вид календаря">
+          <Link href="/calendar" role="tab" aria-selected={view === 'month'} className={view === 'month' ? 'is-active' : ''} onClick={() => setView('month')}>Месяц</Link>
+          <Link href="/calendar/week" role="tab" aria-selected={view === 'week'} className={view === 'week' ? 'is-active' : ''} onClick={() => setView('week')}>Неделя</Link>
         </div>
         {isLoading && <div className="calendar-state" role="status">Загружаем расписание…</div>}
         {isError && <div className="calendar-state" role="alert"><h2>Календарь временно недоступен</h2><p>Не удалось получить актуальные даты. Попробуйте обновить список.</p><button className="button button-primary" onClick={() => refetch()}>Обновить календарь</button></div>}
-        {!isLoading && !isError && <section className="calendar-week" aria-labelledby="calendar-week-title">
-          <div className="calendar-week-toolbar">
-            <div><h2 id="calendar-week-title">Расписание на месяц</h2><p>Время московское · открытые наборы и ближайшие встречи</p></div>
-              <div className="calendar-week-nav" aria-label="Навигация по расписанию">
-              <button type="button" onClick={() => moveMonth(-1)} aria-label="Назад">←</button>
-              <button type="button" className="calendar-week-current" onClick={() => setMonthStart(startOfMonth(today))}>Сегодня</button>
-              <button type="button" onClick={() => moveMonth(1)} aria-label="Вперёд">→</button>
-            </div>
-          </div>
-          <div className="calendar-week-meta"><span>{monthLabel(monthStart)}</span><strong>В расписании: {scheduledCount}</strong></div>
+        {!isLoading && !isError && <>
           <div className="calendar-filters">
             <label><span>Где играем</span><select value={formatFilter} onChange={(event) => setFormatFilter(event.target.value)}><option value="all">Любой формат</option><option value="online">Онлайн</option><option value="offline">Очно в Москве</option></select></label>
             <label><span>Длина истории</span><select value={storyFilter} onChange={(event) => setStoryFilter(event.target.value)}><option value="all">Ваншоты и кампании</option><option value="oneshot">Ваншот — одна встреча</option><option value="campaign">Кампания — серия встреч</option></select></label>
             <label className="calendar-check"><input type="checkbox" checked={beginnersOnly} onChange={(event) => setBeginnersOnly(event.target.checked)} /><span>Подходит новичкам</span></label>
           </div>
-          <div className="calendar-month-scroll" aria-label={`Календарь на ${monthLabel(monthStart)}`}>
-            <div className="calendar-month-grid">
-              {monthGrid.map((day, index) => day ? <section className={`calendar-month-day${day.date === today ? ' is-today' : ''}`} key={day.date}>
-                <header><span>{day.label}</span><strong>{parseDateKey(day.date).getUTCDate()}</strong></header>
-                <div>{day.games.map((game) => <WeeklyGame game={game} key={game.id} />)}</div>
-              </section> : <div className="calendar-month-day is-empty" aria-hidden="true" key={`empty-${index}`} />)}
-            </div>
-          </div>
-        </section>}
-        {!isLoading && !isError && <section className="calendar-actions-bottom" aria-label="Действия с расписанием" data-testid="calendar-bottom-actions">
-          <div>
-            <span className="catalog-kicker">СЛЕДУЮЩИЙ ШАГ</span>
-            <h2>Нашли свой слот?</h2>
-            <p>Запишитесь на открытую игру или добавьте новую встречу в мастерском календаре.</p>
-          </div>
-          <div className="calendar-actions-buttons">
-            <Link href="/anketa" className="button button-primary">Записаться на игру <ArrowUpRight size={15} /></Link>
-            <Link href="/master/calendar" className="button button-ghost">Добавить игру <ArrowUpRight size={15} /></Link>
-          </div>
-        </section>}
+          {view === 'month' ? <section className="calendar-week" aria-labelledby="calendar-month-title">
+            <div className="calendar-week-toolbar"><div><h2 id="calendar-month-title">{monthLabel(monthStart)}</h2><p>Время московское · открытые наборы и ближайшие встречи</p></div><div className="calendar-week-nav" aria-label="Навигация по месяцам"><button type="button" onClick={() => moveMonth(-1)} aria-label="Предыдущий месяц">←</button><button type="button" className="calendar-week-current" onClick={showToday}>Сегодня</button><button type="button" onClick={() => moveMonth(1)} aria-label="Следующий месяц">→</button></div></div>
+            <div className="calendar-week-meta"><span>{monthLabel(monthStart)}</span><strong>В расписании: {scheduledCount}</strong></div>
+            <div className="calendar-month-scroll" role="grid" aria-label={`Календарь на ${monthLabel(monthStart)}`}><div className="calendar-month-weekdays" aria-hidden="true">{weekDayLabels.map((label) => <span key={label}>{label}</span>)}</div><div className="calendar-month-grid">{monthGrid.map((day) => <section className={`calendar-month-day${day.date === today ? ' is-today' : ''}${day.date < today ? ' is-past' : ''}${day.date.slice(0, 7) !== monthStart.slice(0, 7) ? ' is-other-month' : ''}`} role="gridcell" aria-label={formatDate(day.date)} key={day.date}><header><span>{parseDateKey(day.date).getUTCDate()}</span></header><div>{day.games.slice(0, 3).map((game) => <MonthGame game={game} key={game.id} />)}{day.games.length > 3 && <span className="calendar-month-more">+{day.games.length - 3} ещё</span>}</div></section>)}</div></div>
+          </section> : <section className="calendar-week" aria-labelledby="calendar-week-title">
+            <div className="calendar-week-toolbar"><div><h2 id="calendar-week-title">Расписание на неделю</h2><p>Время московское · открытые наборы и ближайшие встречи</p></div><div className="calendar-week-nav" aria-label="Навигация по неделям"><button type="button" onClick={() => moveWeek(-1)} aria-label="Предыдущая неделя">←</button><button type="button" className="calendar-week-current" onClick={showToday}>Эта неделя</button><button type="button" onClick={() => moveWeek(1)} aria-label="Следующая неделя">→</button></div></div>
+            <div className="calendar-week-meta"><span>{formatWeekRange(weekStart)}</span><strong>В расписании: {scheduledCount}</strong></div>
+            <div className="calendar-week-grid-scroll"><div className="calendar-week-grid">{weekDays.map((day) => <section className={`calendar-day${day.date === today ? ' is-today' : ''}${day.date < today ? ' is-past' : ''}`} key={day.date} aria-labelledby={`calendar-day-${day.date}`}><header className="calendar-day-head"><div><span>{day.label}</span><strong>{parseDateKey(day.date).getUTCDate()}</strong></div><small id={`calendar-day-${day.date}`}>{day.name}</small></header><div className="calendar-day-body">{day.games.length ? day.games.map((game) => <WeeklyGame game={game} key={game.id} />) : <p className="calendar-day-empty">Свободный день</p>}</div></section>)}</div></div>
+          </section>}
+        </>}
+        {!isLoading && !isError && <section className="calendar-actions-bottom" aria-label="Действия с расписанием" data-testid="calendar-bottom-actions"><div><span className="catalog-kicker">СЛЕДУЮЩИЙ ШАГ</span><h2>Нашли свой слот?</h2><p>Запишитесь на открытую игру или добавьте новую встречу в мастерском календаре.</p></div><div className="calendar-actions-buttons"><Link href="/anketa" className="button button-primary">Записаться на игру <ArrowUpRight size={15} /></Link><Link href="/master/calendar" className="button button-ghost">Добавить игру <ArrowUpRight size={15} /></Link></div></section>}
       </main>
     </Shell>
   );
+}
+
+function MonthGame({ game }: { game: Game }) {
+  const isPast = game.dateISO < todayInMoscow();
+  const interactive = !isPast && (canApply(game) || game.status === 'open_slot');
+  const className = `calendar-month-event calendar-event-${game.status}${isPast ? ' is-past' : ''}`;
+  const content = <><time>{game.time === '—' ? '' : game.time}</time><span>{game.title}</span></>;
+  return interactive ? <Link href={game.status === 'open_slot' ? '/anketa' : `/anketa?event=${encodeURIComponent(game.eventId)}&date=${encodeURIComponent(game.dateISO)}`} className={className} title={`${game.title} · ${game.time}`}>{content}</Link> : <article className={className} title={`${game.title} · ${game.time}`}>{content}</article>;
 }
 
 function WeeklyGame({ game }: { game: Game }) {
@@ -916,6 +949,10 @@ const pageMeta: Record<string, { title: string; description: string }> = {
     title: 'Календарь игр — Мадмуазель Никс',
     description: 'Ближайшие открытые столы, даты, свободные места и цены на игры Никс.',
   },
+  '/calendar/week': {
+    title: 'Недельное расписание — Мадмуазель Никс',
+    description: 'Недельное расписание игр, открытые наборы и ближайшие встречи Никс.',
+  },
   '/games': {
     title: 'Каталог игр — Мадмуазель Никс',
     description: 'D&D, Daggerheart, Vampire и Cyberpunk: выберите мир и формат будущей игры.',
@@ -928,9 +965,10 @@ const pageMeta: Record<string, { title: string; description: string }> = {
 
 function Seo() {
   const [location] = useLocation();
+  const pathname = location.split(/[?#]/, 1)[0].replace(/\/+$/, '') || '/';
 
   useEffect(() => {
-    const meta = pageMeta[location] ?? pageMeta['/'];
+    const meta = pageMeta[pathname] ?? pageMeta['/'];
     document.title = meta.title;
     document.documentElement.lang = 'ru';
     document.querySelector('meta[name="description"]')?.setAttribute('content', meta.description);
@@ -938,21 +976,41 @@ function Seo() {
     document.querySelector('meta[property="og:description"]')?.setAttribute('content', meta.description);
     document.querySelector('meta[name="twitter:title"]')?.setAttribute('content', meta.title);
     document.querySelector('meta[name="twitter:description"]')?.setAttribute('content', meta.description);
-    const pageUrl = new URL(location || '/', window.location.origin).href;
+    const pageUrl = new URL(pathname, window.location.origin).href;
     const imageUrl = new URL('/og.png', window.location.origin).href;
     document.querySelector('meta[property="og:url"]')?.setAttribute('content', pageUrl);
     document.querySelector('meta[property="og:image"]')?.setAttribute('content', imageUrl);
     document.querySelector('meta[name="twitter:image"]')?.setAttribute('content', imageUrl);
     document.querySelector('link[rel="canonical"]')?.setAttribute('href', pageUrl);
-  }, [location]);
+  }, [location, pathname]);
 
   return null;
 }
 
+function RouteTransition({ children }: { children: ReactNode }) {
+  const [location] = useLocation();
+  const search = useSearch();
+  const routeKey = `${location}${search ? `?${search}` : ''}`;
+
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (hash) {
+      let targetId = hash;
+      try { targetId = decodeURIComponent(hash); } catch { /* Keep malformed hashes harmless. */ }
+      requestAnimationFrame(() => document.getElementById(targetId)?.scrollIntoView({ behavior: preferredScrollBehavior(), block: 'start' }));
+      return;
+    }
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [routeKey]);
+
+  return <div className="route-enter" key={routeKey}>{children}</div>;
+}
+
 function Router() {
   const [location] = useLocation();
+  const search = useSearch();
   if (location === '/master' || location === '/master/' || location.startsWith('/master/')) return <MasterRoutes />;
-  return <ErrorBoundary resetKey={location}><Seo /><Switch><Route path="/" component={Home} /><Route path="/calendar" component={CalendarPage} /><Route path="/anketa" component={ApplicationPage} /><Route path="/games" component={GamesPage} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={`${location}?${search}`}><Seo /><RouteTransition><Switch><Route path="/" component={Home} /><Route path="/calendar/week" component={() => <CalendarPage initialView="week" />} /><Route path="/calendar" component={() => <CalendarPage initialView="month" />} /><Route path="/anketa" component={ApplicationPage} /><Route path="/games" component={GamesPage} /><Route component={NotFound} /></Switch></RouteTransition></ErrorBoundary>;
 }
 
 function App() {

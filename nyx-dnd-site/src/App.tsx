@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
-import { ArrowUpRight, CalendarDays, Check, Clock3, Menu, Video, X } from 'lucide-react';
+import { ArrowUpRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Menu, Video, X } from 'lucide-react';
 import { Link, Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
 import {
   useGetApplicationSelection,
@@ -85,6 +85,23 @@ function startOfWeek(value: string) {
   const mondayOffset = (date.getUTCDay() + 6) % 7;
   date.setUTCDate(date.getUTCDate() - mondayOffset);
   return dateKeyFromDate(date);
+}
+
+function startOfMonth(value: string) {
+  const date = parseDateKey(value);
+  date.setUTCDate(1);
+  return dateKeyFromDate(date);
+}
+
+function moveMonth(value: string, amount: number) {
+  const date = parseDateKey(startOfMonth(value));
+  date.setUTCMonth(date.getUTCMonth() + amount);
+  return dateKeyFromDate(date);
+}
+
+function formatMonthTitle(value: string) {
+  const title = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(parseDateKey(value));
+  return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
 function formatDate(date: string) {
@@ -228,7 +245,7 @@ function Header() {
       </button>
       <nav id="main-navigation" className={`nav-links ${open ? 'open' : ''}`} aria-label="Основная навигация">
         <Link href="/games" className={`nav-link ${location === '/games' ? 'active' : ''}`} onClick={close} data-testid="link-games">Игры</Link>
-        <Link href="/calendar" className={`nav-link ${location === '/calendar' ? 'active' : ''}`} onClick={close} data-testid="link-calendar">Календарь</Link>
+        <Link href="/calendar" className={`nav-link ${location === '/calendar' || location === '/calendar/week' ? 'active' : ''}`} onClick={close} data-testid="link-calendar">Календарь</Link>
         <a href="/#about" className="nav-link" onClick={close} data-testid="link-about">Как это работает</a>
         <a href="/#faq" className="nav-link" onClick={close} data-testid="link-faq">FAQ</a>
         <Link href="/anketa" className="nav-cta" onClick={close} data-testid="link-nav-apply">Записаться <ArrowUpRight size={14} /></Link>
@@ -559,16 +576,19 @@ function Faq({ question, answer }: { question: string; answer: string }) {
   return <details className="faq-item"><summary data-testid={`faq-${question}`}>{question}</summary><p>{answer}</p></details>;
 }
 
-function CalendarPage() {
+type CalendarView = 'month' | 'week';
+
+function CalendarPage({ initialView = 'month' }: { initialView?: CalendarView }) {
   const { events, games: upcomingGames, isLoading, isError, refetch } = useLiveGames();
   const today = todayInMoscow();
   const hasPublishedEvents = events.some((event) => !event.archived);
+  const [view, setView] = useState<CalendarView>(initialView);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(today));
+  const [monthStart, setMonthStart] = useState(() => startOfMonth(today));
   const [formatFilter, setFormatFilter] = useState('all');
   const [storyFilter, setStoryFilter] = useState('all');
   const [beginnersOnly, setBeginnersOnly] = useState(false);
-  const weekGames = useMemo(() => {
-    return expandEvents(events, weekStart, addDays(weekStart, 6)).filter((game) => {
+  const filterGames = (games: Game[]) => games.filter((game) => {
       const normalizedFormat = game.format.toLowerCase();
       const experience = game.experience.toLowerCase();
       const formatMatches = formatFilter === 'all' || (formatFilter === 'online' ? normalizedFormat.includes('online') : normalizedFormat.includes('offline'));
@@ -576,15 +596,36 @@ function CalendarPage() {
       const beginnerMatches = !beginnersOnly || !experience || /нович|любой|начин/.test(experience);
       return formatMatches && storyMatches && beginnerMatches;
     });
-  }, [beginnersOnly, events, formatFilter, storyFilter, weekStart]);
+  const weekGames = useMemo(() => filterGames(expandEvents(events, weekStart, addDays(weekStart, 6))), [beginnersOnly, events, formatFilter, storyFilter, weekStart]);
+  const monthGridStart = startOfWeek(monthStart);
+  const monthGames = useMemo(() => filterGames(expandEvents(events, monthGridStart, addDays(monthGridStart, 41))), [beginnersOnly, events, formatFilter, monthGridStart, storyFilter]);
+  const monthGamesByDate = useMemo(() => {
+    const grouped = new Map<string, Game[]>();
+    monthGames.forEach((game) => grouped.set(game.dateISO, [...(grouped.get(game.dateISO) ?? []), game]));
+    return grouped;
+  }, [monthGames]);
+  const monthDays = useMemo(() => Array.from({ length: 42 }, (_, index) => {
+    const date = addDays(monthGridStart, index);
+    return { date, games: monthGamesByDate.get(date) ?? [] };
+  }), [monthGamesByDate, monthGridStart]);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => {
     const date = addDays(weekStart, index);
     return { date, label: weekDayLabels[index], name: formatDayName(date), games: weekGames.filter((game) => game.dateISO === date) };
   }), [weekGames, weekStart]);
   const scheduledCount = weekGames.filter((game) => !calendarOnlyStatuses.has(game.status)).length;
+  const monthScheduledCount = monthGames.filter((game) => game.dateISO.slice(0, 7) === monthStart.slice(0, 7) && !calendarOnlyStatuses.has(game.status)).length;
 
   function moveWeek(offset: number) {
     setWeekStart((current) => addDays(current, offset * 7));
+  }
+
+  function moveMonthPage(offset: number) {
+    setMonthStart((current) => moveMonth(current, offset));
+  }
+
+  function showToday() {
+    setWeekStart(startOfWeek(today));
+    setMonthStart(startOfMonth(today));
   }
 
   return (
@@ -595,38 +636,78 @@ function CalendarPage() {
           <h1>Вся неделя<br /><em>перед глазами</em></h1>
           <p>Здесь собраны открытые наборы, текущие кампании, детские группы, выходные и свободные слоты. Не нашли подходящую дату — <Link href="/anketa">оставьте пожелания</Link>.</p>
         </div>
-        <div className="calendar-manage-note">
-          <div><strong>Как добавить игру</strong><span>Откройте мастерский календарь, войдите по паролю и нажмите «Добавить игру». Изменения появятся здесь автоматически.</span></div>
-          <a href={`${MASTER_SITE}/calendar`} target="_blank" rel="noreferrer">Добавить игру <ArrowUpRight size={14} /></a>
-        </div>
-        {isLoading && <div className="calendar-state" role="status">Загружаем расписание…</div>}
-        {isError && <div className="calendar-state" role="alert"><h2>Календарь временно недоступен</h2><p>Не удалось получить актуальные даты. Попробуйте обновить список.</p><button className="button button-primary" onClick={() => refetch()}>Обновить календарь</button></div>}
-        {!isLoading && !isError && !hasPublishedEvents && !upcomingGames.length && <div className="calendar-state"><h2>Ближайших игр пока нет</h2><p>Оставьте заявку — я помогу подобрать формат и дату под вашу компанию.</p><Link href="/anketa" className="button button-primary">Оставить заявку <ArrowUpRight size={15} /></Link></div>}
-        {!isLoading && !isError && (hasPublishedEvents || upcomingGames.length > 0) && <section className="calendar-week" aria-labelledby="calendar-week-title">
-          <div className="calendar-week-toolbar">
-            <div><h2 id="calendar-week-title">Расписание на неделю</h2><p>Время московское · открытые наборы и ближайшие встречи</p></div>
-            <div className="calendar-week-nav" aria-label="Навигация по неделям">
-              <button type="button" onClick={() => moveWeek(-1)} aria-label="Предыдущая неделя">←</button>
-              <button type="button" className="calendar-week-current" onClick={() => setWeekStart(startOfWeek(today))}>Эта неделя</button>
-              <button type="button" onClick={() => moveWeek(1)} aria-label="Следующая неделя">→</button>
-            </div>
-          </div>
-          <div className="calendar-week-meta"><span>{formatWeekRange(weekStart)}</span><strong>В расписании: {scheduledCount}</strong></div>
-          <div className="calendar-filters">
-            <label><span>Где играем</span><select value={formatFilter} onChange={(event) => setFormatFilter(event.target.value)}><option value="all">Любой формат</option><option value="online">Онлайн</option><option value="offline">Очно в Москве</option></select></label>
-            <label><span>Длина истории</span><select value={storyFilter} onChange={(event) => setStoryFilter(event.target.value)}><option value="all">Ваншоты и кампании</option><option value="oneshot">Ваншот — одна встреча</option><option value="campaign">Кампания — серия встреч</option></select></label>
-            <label className="calendar-check"><input type="checkbox" checked={beginnersOnly} onChange={(event) => setBeginnersOnly(event.target.checked)} /><span>Подходит новичкам</span></label>
-          </div>
-          <div className="calendar-week-grid">
-            {weekDays.map((day) => <section className={`calendar-day${day.date === today ? ' is-today' : ''}${day.date < today ? ' is-past' : ''}`} key={day.date} aria-labelledby={`calendar-day-${day.date}`}>
-              <header className="calendar-day-head"><div><span>{day.label}</span><strong>{parseDateKey(day.date).getUTCDate()}</strong></div><small id={`calendar-day-${day.date}`}>{day.name}</small></header>
-              <div className="calendar-day-body">{day.games.length ? day.games.map((game) => <WeeklyGame game={game} key={game.id} />) : <p className="calendar-day-empty">Свободный день</p>}</div>
-            </section>)}
-          </div>
-        </section>}
-      </main>
-    </Shell>
-  );
+         <div className="calendar-manage-note">
+           <div><strong>Как добавить игру</strong><span>Откройте мастерский календарь, войдите по паролю и нажмите «Добавить игру». Изменения появятся здесь автоматически.</span></div>
+           <a href={`${MASTER_SITE}/calendar`} target="_blank" rel="noreferrer">Добавить игру <ArrowUpRight size={14} /></a>
+         </div>
+         <div className="calendar-view-switcher" role="tablist" aria-label="Вид календаря">
+           <Link href="/calendar" role="tab" aria-selected={view === 'month'} className={view === 'month' ? 'is-active' : ''} onClick={() => setView('month')}>Месяц</Link>
+           <Link href="/calendar/week" role="tab" aria-selected={view === 'week'} className={view === 'week' ? 'is-active' : ''} onClick={() => setView('week')}>Неделя</Link>
+         </div>
+         {isLoading && <div className="calendar-state" role="status">Загружаем расписание…</div>}
+         {isError && <div className="calendar-state" role="alert"><h2>Календарь временно недоступен</h2><p>Не удалось получить актуальные даты. Попробуйте обновить список.</p><button className="button button-primary" onClick={() => refetch()}>Обновить календарь</button></div>}
+         {!isLoading && !isError && !hasPublishedEvents && !upcomingGames.length && <div className="calendar-state"><h2>Ближайших игр пока нет</h2><p>Оставьте заявку — я помогу подобрать формат и дату под вашу компанию.</p><Link href="/anketa" className="button button-primary">Оставить заявку <ArrowUpRight size={15} /></Link></div>}
+         {!isLoading && !isError && <>
+           <section className="calendar-controls" aria-label="Управление календарём">
+             <div className="calendar-filters">
+               <label><span>Где играем</span><select value={formatFilter} onChange={(event) => setFormatFilter(event.target.value)}><option value="all">Любой формат</option><option value="online">Онлайн</option><option value="offline">Очно в Москве</option></select></label>
+               <label><span>Длина истории</span><select value={storyFilter} onChange={(event) => setStoryFilter(event.target.value)}><option value="all">Ваншоты и кампании</option><option value="oneshot">Ваншот — одна встреча</option><option value="campaign">Кампания — серия встреч</option></select></label>
+               <label className="calendar-check"><input type="checkbox" checked={beginnersOnly} onChange={(event) => setBeginnersOnly(event.target.checked)} /><span>Подходит новичкам</span></label>
+             </div>
+           </section>
+           {view === 'month' ? <section className="calendar-month" aria-labelledby="calendar-month-title">
+             <div className="calendar-week-toolbar calendar-month-toolbar">
+               <div><h2 id="calendar-month-title">{formatMonthTitle(monthStart)}</h2><p>Время московское · {monthScheduledCount} встреч в расписании</p></div>
+               <div className="calendar-week-nav" aria-label="Навигация по месяцам">
+                 <button type="button" onClick={() => moveMonthPage(-1)} aria-label="Предыдущий месяц"><ChevronLeft size={16} /></button>
+                 <button type="button" className="calendar-week-current" onClick={showToday}>Сегодня</button>
+                 <button type="button" onClick={() => moveMonthPage(1)} aria-label="Следующий месяц"><ChevronRight size={16} /></button>
+               </div>
+             </div>
+             <div className="calendar-month-scroll">
+               <div className="calendar-month-weekdays" aria-hidden="true">{weekDayLabels.map((label) => <span key={label}>{label}</span>)}</div>
+               <div className="calendar-month-grid" role="grid" aria-label={formatMonthTitle(monthStart)}>
+                 {monthDays.map((day) => <section className={`calendar-month-day${day.date === today ? ' is-today' : ''}${day.date < today ? ' is-past' : ''}${day.date.slice(0, 7) !== monthStart.slice(0, 7) ? ' is-other-month' : ''}`} key={day.date} role="gridcell" aria-label={formatDate(day.date)}>
+                   <header className="calendar-month-day-head"><span>{parseDateKey(day.date).getUTCDate()}</span></header>
+                   <div className="calendar-month-day-body">
+                     {day.games.slice(0, 3).map((game) => <MonthGame game={game} key={game.id} />)}
+                     {day.games.length > 3 && <span className="calendar-month-more">+{day.games.length - 3} ещё</span>}
+                   </div>
+                 </section>)}
+               </div>
+             </div>
+           </section> : <section className="calendar-week" aria-labelledby="calendar-week-title">
+             <div className="calendar-week-toolbar">
+               <div><h2 id="calendar-week-title">Расписание на неделю</h2><p>Время московское · открытые наборы и ближайшие встречи</p></div>
+               <div className="calendar-week-nav" aria-label="Навигация по неделям">
+                 <button type="button" onClick={() => moveWeek(-1)} aria-label="Предыдущая неделя"><ChevronLeft size={16} /></button>
+                 <button type="button" className="calendar-week-current" onClick={showToday}>Эта неделя</button>
+                 <button type="button" onClick={() => moveWeek(1)} aria-label="Следующая неделя"><ChevronRight size={16} /></button>
+               </div>
+             </div>
+             <div className="calendar-week-meta"><span>{formatWeekRange(weekStart)}</span><strong>В расписании: {scheduledCount}</strong></div>
+             <div className="calendar-week-grid-scroll"><div className="calendar-week-grid">
+               {weekDays.map((day) => <section className={`calendar-day${day.date === today ? ' is-today' : ''}${day.date < today ? ' is-past' : ''}`} key={day.date} aria-labelledby={`calendar-day-${day.date}`}>
+                 <header className="calendar-day-head"><div><span>{day.label}</span><strong>{parseDateKey(day.date).getUTCDate()}</strong></div><small id={`calendar-day-${day.date}`}>{day.name}</small></header>
+                 <div className="calendar-day-body">{day.games.length ? day.games.map((game) => <WeeklyGame game={game} key={game.id} />) : <p className="calendar-day-empty">Свободный день</p>}</div>
+               </section>)}
+             </div></div>
+           </section>}
+         </>}
+       </main>
+     </Shell>
+   );
+}
+
+function MonthGame({ game }: { game: Game }) {
+  const isPast = game.dateISO < todayInMoscow();
+  const isInteractive = !isPast && (canApply(game) || game.status === 'open_slot');
+  const className = `calendar-month-event calendar-event-${game.status}${isPast ? ' is-past' : ''}`;
+  const content = <><time>{game.time === '—' ? '' : game.time}</time><span>{game.title}</span></>;
+  if (isInteractive) {
+    return <Link href={game.status === 'open_slot' ? '/anketa' : `/anketa?event=${encodeURIComponent(game.eventId)}&date=${encodeURIComponent(game.dateISO)}`} className={className} title={`${game.title} · ${game.time}`}>{content}</Link>;
+  }
+  return <article className={className} title={`${game.title} · ${game.time}`}>{content}</article>;
 }
 
 function WeeklyGame({ game }: { game: Game }) {
@@ -772,6 +853,10 @@ const pageMeta: Record<string, { title: string; description: string }> = {
     title: 'Календарь игр — Мадмуазель Никс',
     description: 'Ближайшие открытые столы, даты, свободные места и цены на игры Никс.',
   },
+  '/calendar/week': {
+    title: 'Недельное расписание — Мадмуазель Никс',
+    description: 'Недельное расписание игр, открытые наборы и ближайшие встречи Никс.',
+  },
   '/games': {
     title: 'Каталог игр — Мадмуазель Никс',
     description: 'D&D, Daggerheart, Vampire и Cyberpunk: выберите мир и формат будущей игры.',
@@ -808,7 +893,7 @@ function Seo() {
 function Router() {
   const [location] = useLocation();
   if (location.startsWith('/master')) return <MasterRoutes />;
-  return <ErrorBoundary resetKey={location}><Seo /><Switch><Route path="/" component={Home} /><Route path="/calendar" component={CalendarPage} /><Route path="/anketa" component={ApplicationPage} /><Route path="/games" component={GamesPage} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={location}><Seo /><Switch><Route path="/" component={Home} /><Route path="/calendar/week" component={() => <CalendarPage initialView="week" />} /><Route path="/calendar" component={() => <CalendarPage initialView="month" />} /><Route path="/anketa" component={ApplicationPage} /><Route path="/games" component={GamesPage} /><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
 
 function App() {
