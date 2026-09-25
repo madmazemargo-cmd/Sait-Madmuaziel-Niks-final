@@ -95,6 +95,7 @@
 @keyframes shimmer { from { background-position: 0% 50%; } to { background-position: 200% 50%; } }
 
 .nyx-site { min-height: 100dvh; overflow: hidden; background: linear-gradient(135deg, #0f050d 0%, #24142d 48%, #110811 100%); background-attachment: fixed; color: #f5eddc; }
+.flaticon-icon { display: inline-block; flex: 0 0 auto; font-style: normal; line-height: 1; vertical-align: middle; }
 .page-shell { position: relative; max-width: 1500px; margin: 0 auto; padding: 0 5vw; }
 .site-nav { display: flex; align-items: center; justify-content: space-between; padding: 26px 0; position: relative; z-index: 10; }
 .brand { color: #f5eddc; text-decoration: none; display: flex; align-items: center; gap: 12px; font-weight: 800; letter-spacing: -.04em; font-size: 15px; }
@@ -221,6 +222,20 @@
 .text-link { display: inline-flex; align-items: center; gap: 8px; color: #19101f; font-size: 11px; font-weight: 800; text-decoration: none; }
 .text-link:hover, .text-link:focus-visible { text-decoration: underline; text-underline-offset: 4px; outline: none; }
 
+@media (min-width: 901px) {
+  /* Match the price card to the first system cover while keeping its bottom edge with the grid. */
+  .pricing-panel { margin-top: 144px; padding: 24px; }
+  .pricing-rune { margin: 18px 0 8px; font-size: 44px; }
+  .pricing-panel h3 { font-size: 52px; margin-bottom: 14px; }
+  .pricing-list { margin: 12px 0 14px; }
+  .pricing-list div { padding: 10px 0; }
+  .pricing-note { margin-bottom: 16px; }
+}
+
+@media (min-width: 1035px) {
+  .pricing-panel { margin-top: 106px; }
+}
+
 .system-showcase-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .system-showcase-card { position: relative; min-width: 0; min-height: 150px; aspect-ratio: 2.55 / 1; overflow: hidden; border: 1px solid #44344a; background: #1f1526; color: #f5eddc; text-decoration: none; isolation: isolate; transition: border-color .22s ease, transform .22s ease; }
 .system-showcase-card:first-child { grid-column: 1 / -1; aspect-ratio: 4.9 / 1; }
@@ -245,24 +260,25 @@
 .catalog-kind-filters button { min-height: 40px; padding: 10px 14px; border: 1px solid #5a465f; background: transparent; color: #b5a8b8; font: 10px/1 var(--app-font-mono); cursor: pointer; }
 .catalog-kind-filters button:hover, .catalog-kind-filters button:focus-visible { color: #d8ff55; border-color: #d8ff55; outline: none; }
 .catalog-kind-filters button.is-active { color: #19101f; border-color: #d8ff55; background: #d8ff55; }
-.catalog-game-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.catalog-game-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; border-top: 1px solid #44344a; }
 .catalog-system-sections { display: grid; gap: 42px; }
 .catalog-system-section { border-top: 1px solid #44344a; padding-top: 18px; }
 .catalog-system-section-head { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
 .catalog-system-section-head h3 { margin: 9px 0 0; color: #f5eddc; font: 600 34px/.95 var(--app-font-serif); letter-spacing: -.035em; }
 .catalog-system-section-head a { display: inline-flex; align-items: center; gap: 7px; color: #d8ff55; font-size: 11px; font-weight: 800; text-decoration: none; }
 .catalog-system-section-head a:hover, .catalog-system-section-head a:focus-visible { color: #efffa5; text-decoration: underline; text-underline-offset: 4px; outline: none; }
-.catalog-game-card { min-width: 0; display: flex; flex-direction: column; border: 1px solid #44344a; background: #292035; overflow: hidden; }
-.catalog-game-cover { position: relative; aspect-ratio: 16 / 8.5; overflow: hidden; background-color: #1f1526; background-position: center; background-size: cover; }
-.catalog-game-cover::after { content: ''; position: absolute; inset: 45% 0 0; background: linear-gradient(transparent, rgba(25,16,31,.88)); }
+.catalog-game-card { min-width: 0; min-height: 286px; position: relative; display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(260px, .88fr); border-bottom: 1px solid #44344a; background: #292035; overflow: hidden; isolation: isolate; transition: background-color .25s ease; }
+.catalog-game-card:hover { background: #30243b; }
+.catalog-game-cover { grid-column: 2; grid-row: 1; min-height: 286px; position: relative; overflow: hidden; background-color: #1f1526; background-position: center; background-size: cover; -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.46) 17%, #000 58%, #000 100%); mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.46) 17%, #000 58%, #000 100%); }
+.catalog-game-cover::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, #292035 0%, rgba(41,32,53,.82) 17%, rgba(41,32,53,.2) 63%, rgba(41,32,53,0) 100%), linear-gradient(0deg, rgba(25,16,31,.72), transparent 58%); pointer-events: none; }
 .catalog-game-cover img { width: 100%; height: 100%; display: block; object-fit: cover; transition: transform .45s ease; }
 .catalog-game-card:hover .catalog-game-cover img { transform: scale(1.035); }
-.catalog-game-tags { position: absolute; z-index: 1; left: 15px; right: 15px; bottom: 14px; display: flex; gap: 7px; flex-wrap: wrap; }
+.catalog-game-tags { position: absolute; z-index: 1; left: 18px; right: 15px; bottom: 14px; display: flex; justify-content: flex-end; gap: 7px; flex-wrap: wrap; }
 .catalog-game-tags span { display: inline-flex; align-items: center; min-height: 24px; max-width: 100%; padding: 6px 9px; border: 1px solid rgba(216,255,85,.48); border-radius: 2px; background: rgba(25,16,31,.88); box-shadow: 0 4px 12px rgba(0,0,0,.16); color: #efffa5; font: 8px/1.15 var(--app-font-mono); letter-spacing: .04em; text-transform: uppercase; white-space: normal; backdrop-filter: blur(4px); }
 .catalog-game-tags span:first-child { border-color: rgba(255,113,106,.62); color: #ffaaa4; }
-.catalog-game-body { flex: 1; display: flex; flex-direction: column; padding: 24px; }
+.catalog-game-body { grid-column: 1; grid-row: 1; min-width: 0; z-index: 1; display: flex; flex-direction: column; justify-content: center; padding: 29px 16px 29px 0; }
 .catalog-game-system { color: #ff716a; font: 9px/1.2 var(--app-font-mono); letter-spacing: .1em; text-transform: uppercase; }
-.catalog-game-body h2 { margin: 10px 0 12px; color: #f5eddc; font: 600 38px/.92 var(--app-font-serif); letter-spacing: -.035em; }
+.catalog-game-body h2 { margin: 10px 0 12px; color: #f5eddc; font: 600 clamp(31px, 3.4vw, 44px)/.92 var(--app-font-serif); letter-spacing: -.035em; }
 .catalog-game-body > p { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 4; min-height: 6.4em; margin: 0 0 19px; color: #a696a9; font-size: 11px; line-height: 1.6; }
 .catalog-game-facts { margin: auto 0 18px; border-top: 1px solid #44344a; }
 .catalog-game-facts div { display: grid; grid-template-columns: 80px 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid #44344a; }
@@ -310,6 +326,8 @@
 .footer a:hover { color: #d8ff55; }
 .footer a.footer-support { color: #8e7d94; }
 .footer a.footer-support:hover, .footer a.footer-support:focus-visible { color: #d8ff55; }
+.footer a.footer-icons-credit { color: #8e7d94; font-size: 10px; }
+.footer a.footer-icons-credit:hover, .footer a.footer-icons-credit:focus-visible { color: #d8ff55; }
 
 .subpage { padding: 55px 0 110px; min-height: 76vh; }
 .subpage-head { max-width: 720px; padding: 45px 0 55px; }
@@ -470,7 +488,7 @@
   .catalog-section-head, .catalog-prices { grid-template-columns: 1fr; gap: 28px; }
   .catalog-prices { margin-top: 70px; }
   .catalog-layout { grid-template-columns: 1fr; }
-  .pricing-panel { position: relative; min-height: 0; }
+  .pricing-panel { position: relative; min-height: 0; margin-top: 0; }
   .catalog-game-grid { grid-template-columns: 1fr; }
   .calendar-hero { grid-template-columns: 1fr; gap: 28px; }
   .calendar-actions-bottom { align-items: flex-start; flex-direction: column; }
@@ -533,6 +551,13 @@
   .catalog-development-state img { min-height: 220px; max-height: 260px; }
   .catalog-development-state > div { padding: 26px; }
   .catalog-development-state h2 { font-size: 39px; }
+  .catalog-game-card { min-height: 0; display: flex; flex-direction: column; }
+  .catalog-game-body { order: 1; padding: 23px 0 21px; }
+  .catalog-game-body h2 { font-size: 34px; }
+  .catalog-game-body > p { min-height: 0; margin-bottom: 17px; }
+  .catalog-game-cover { order: 2; min-height: 168px; aspect-ratio: 16 / 7; -webkit-mask-image: none; mask-image: none; }
+  .catalog-game-cover::after { background: linear-gradient(0deg, #292035 0%, rgba(41,32,53,.34) 42%, rgba(41,32,53,0) 100%); }
+  .catalog-game-tags { left: 0; right: 12px; bottom: 12px; justify-content: flex-end; }
   .gallery-layout { grid-template-columns: 1fr; }
   .gallery-main { min-height: 280px; }
   .gallery-side { gap: 10px; }
@@ -606,17 +631,17 @@
 .calendar-view-switch a.is-active { color: #19101f; background: #d8ff55; border-color: #d8ff55; }
 .calendar-month-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); min-width: 700px; border-top: 1px solid #44344a; border-left: 1px solid #44344a; }
 .calendar-month-weekdays span { padding: 8px 10px; border-right: 1px solid #44344a; border-bottom: 1px solid #44344a; color: #a696a9; background: #211728; font: 9px/1 var(--app-font-mono); letter-spacing: .08em; }
-.calendar-month-scroll { --calendar-month-row-height: 104px; max-height: none; overflow-x: auto; overflow-y: hidden; border-top: 0; }
+.calendar-month-scroll { --calendar-month-row-height: 88px; max-height: none; overflow-x: auto; overflow-y: hidden; border-top: 0; }
 .calendar-month-grid { grid-auto-rows: var(--calendar-month-row-height); min-width: 700px; }
 .calendar-month-day { height: var(--calendar-month-row-height); }
 .calendar-month-day.is-past { background: rgba(10,8,13,.22); }
 .calendar-month-day.is-other-month { background: rgba(20,13,24,.45); }
 .calendar-month-day.is-other-month > header { color: #6f6075; }
-.calendar-month-day > header { min-height: 27px; padding: 6px 8px 3px; }
+.calendar-month-day > header { min-height: 25px; padding: 5px 8px 2px; }
 .calendar-month-day > header span { color: #f5eddc; font: 12px/1 var(--app-font-mono); }
 .calendar-month-day.is-today > header span { color: #d8ff55; font-weight: 700; }
-.calendar-month-day > div { display: grid; gap: 3px; max-height: calc(var(--calendar-month-row-height) - 35px); overflow: hidden; padding: 2px 5px 6px; }
-.calendar-month-event { min-width: 0; display: flex; align-items: baseline; gap: 4px; padding: 4px 5px; border: 1px solid #44344a; border-left: 2px solid #d8ff55; background: #292035; color: #f5eddc; overflow: hidden; text-decoration: none; transition: border-color .2s ease, background .2s ease; }
+.calendar-month-day > div { display: grid; gap: 2px; max-height: calc(var(--calendar-month-row-height) - 32px); overflow: hidden; padding: 2px 5px 4px; }
+.calendar-month-event { min-width: 0; display: flex; align-items: baseline; gap: 4px; padding: 3px 5px; border: 1px solid #44344a; border-left: 2px solid #d8ff55; background: #292035; color: #f5eddc; overflow: hidden; text-decoration: none; transition: border-color .2s ease, background .2s ease; }
 .calendar-month-event:hover, .calendar-month-event:focus-visible { border-color: #d8ff55; background: #342746; outline: none; }
 .calendar-month-event.is-past { opacity: .48; }
 .calendar-month-event time { flex: 0 0 auto; color: #ff716a; font: 8px/1.1 var(--app-font-mono); }
@@ -644,10 +669,10 @@
   .calendar-view-switch a { flex: 1; min-width: 0; }
   .calendar-month-weekdays, .calendar-month-grid { min-width: 620px; }
   .calendar-month-scroll { margin-inline: -20px; padding-inline: 20px; }
-  .calendar-month-grid { grid-auto-rows: 86px; }
-  .calendar-month-day { height: 86px; }
-  .calendar-month-day > header { min-height: 24px; padding: 5px 6px 2px; }
-  .calendar-month-day > div { padding: 2px 3px 5px; gap: 2px; }
+  .calendar-month-grid { grid-auto-rows: 72px; }
+  .calendar-month-day { height: 72px; }
+  .calendar-month-day > header { min-height: 22px; padding: 4px 6px 1px; }
+  .calendar-month-day > div { max-height: calc(72px - 30px); padding: 2px 3px 3px; gap: 2px; }
   .calendar-month-event { padding: 3px 4px; }
   .calendar-month-event time { display: none; }
   .calendar-month-event > span { font-size: 8px; }

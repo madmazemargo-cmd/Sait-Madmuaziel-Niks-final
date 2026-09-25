@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type AnchorHTMLAttributes, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
-import { ArrowUpRight, Check, Menu, X } from 'lucide-react';
+import { ArrowUpRight, Check, Menu, X } from '@/components/flaticon-icons';
 import { Link, Route, Switch, Router as WouterRouter, useLocation, useSearch } from 'wouter';
 import {
   useGetApplicationSelection,
@@ -113,8 +113,19 @@ function startOfMonth(value: string) {
   return dateKeyFromDate(date);
 }
 
+function endOfMonth(value: string) {
+  const date = parseDateKey(startOfMonth(value));
+  date.setUTCMonth(date.getUTCMonth() + 1);
+  date.setUTCDate(0);
+  return dateKeyFromDate(date);
+}
+
 function monthGridStart(value: string) {
   return startOfWeek(startOfMonth(value));
+}
+
+function monthGridEnd(value: string) {
+  return addDays(startOfWeek(endOfMonth(value)), 6);
 }
 
 function monthLabel(value: string) {
@@ -297,6 +308,7 @@ function Shell({ children }: { children: ReactNode }) {
             <a href="https://discord.com/invite/madmazeellednd" target="_blank" rel="noreferrer" data-testid="link-discord">Discord</a>
             <Link href="/anketa" data-testid="link-footer-apply">Заполнить анкету</Link>
             <a className="footer-support" href="https://dzen.ru/mad_maze_elle_dnd?donate=true" target="_blank" rel="noreferrer" data-testid="link-support">Поддержать проект</a>
+            <a className="footer-icons-credit" href="https://www.flaticon.com/uicons" target="_blank" rel="noreferrer">Иконки: Flaticon UIcons</a>
           </div>
         </footer>
       </div>
@@ -543,7 +555,7 @@ function Home() {
           <div className="signal"><span className="signal-icon">01</span><span><strong>5 лет</strong><br />веду игры</span></div>
           <div className="signal"><span className="signal-icon">06</span><span><strong>игроков</strong><br />в одной группе</span></div>
           <div className="signal"><span className="signal-icon">∞</span><span><strong>100%</strong><br />живых решений</span></div>
-          <div className="signal"><span className="signal-icon">↗</span><span><strong>Москва</strong><br />и любой экран</span></div>
+          <div className="signal"><ArrowUpRight className="signal-icon" size={17} aria-hidden="true" /><span><strong>Москва</strong><br />и любой экран</span></div>
         </div>
 
         <CatalogSection id="games" />
@@ -624,16 +636,20 @@ function CalendarPage({ initialView = 'month' }: { initialView?: CalendarView })
     return formatMatches && storyMatches && beginnerMatches;
   });
   const monthStartDate = monthGridStart(monthStart);
-  const monthGames = useMemo(() => filterGames(expandEvents(events, monthStartDate, addDays(monthStartDate, 41))), [beginnersOnly, events, formatFilter, monthStartDate, storyFilter]);
+  const monthEndDate = monthGridEnd(monthStart);
+  const monthGames = useMemo(() => filterGames(expandEvents(events, monthStartDate, monthEndDate)), [beginnersOnly, events, formatFilter, monthEndDate, monthStartDate, storyFilter]);
   const monthGamesByDate = useMemo(() => {
     const grouped = new Map<string, Game[]>();
     monthGames.forEach((game) => grouped.set(game.dateISO, [...(grouped.get(game.dateISO) ?? []), game]));
     return grouped;
   }, [monthGames]);
-  const monthGrid = useMemo(() => Array.from({ length: 42 }, (_, index) => {
-    const date = addDays(monthStartDate, index);
-    return { date, games: monthGamesByDate.get(date) ?? [] };
-  }), [monthGamesByDate, monthStartDate]);
+  const monthGrid = useMemo(() => {
+    const gridDays = Math.round((parseDateKey(monthEndDate).getTime() - parseDateKey(monthStartDate).getTime()) / 86400000) + 1;
+    return Array.from({ length: gridDays }, (_, index) => {
+      const date = addDays(monthStartDate, index);
+      return { date, games: monthGamesByDate.get(date) ?? [] };
+    });
+  }, [monthEndDate, monthGamesByDate, monthStartDate]);
   const weekGames = useMemo(() => filterGames(expandEvents(events, weekStart, addDays(weekStart, 6))), [beginnersOnly, events, formatFilter, storyFilter, weekStart]);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => {
     const date = addDays(weekStart, index);

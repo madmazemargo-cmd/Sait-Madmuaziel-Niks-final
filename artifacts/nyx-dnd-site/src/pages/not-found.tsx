@@ -1,5 +1,5 @@
 import { Card, CardContent } from '@/components/ui/card';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle } from '@/components/flaticon-icons';
 
 export default function NotFound() {
   return (

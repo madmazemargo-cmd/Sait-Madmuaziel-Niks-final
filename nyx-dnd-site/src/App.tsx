@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
-import { ArrowUpRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Menu, Video, X } from 'lucide-react';
+import { ArrowUpRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Menu, Video, X } from '@/components/flaticon-icons';
 import { Link, Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
 import {
   useGetApplicationSelection,
@@ -91,6 +91,17 @@ function startOfMonth(value: string) {
   const date = parseDateKey(value);
   date.setUTCDate(1);
   return dateKeyFromDate(date);
+}
+
+function endOfMonth(value: string) {
+  const date = parseDateKey(startOfMonth(value));
+  date.setUTCMonth(date.getUTCMonth() + 1);
+  date.setUTCDate(0);
+  return dateKeyFromDate(date);
+}
+
+function monthGridEnd(value: string) {
+  return addDays(startOfWeek(endOfMonth(value)), 6);
 }
 
 function moveMonth(value: string, amount: number) {
@@ -268,6 +279,7 @@ function Shell({ children }: { children: ReactNode }) {
             <a href="https://discord.com/invite/madmazeellednd" target="_blank" rel="noreferrer" data-testid="link-discord">Discord</a>
             <Link href="/anketa" data-testid="link-footer-apply">Заполнить анкету</Link>
             <a className="footer-support" href="https://dzen.ru/mad_maze_elle_dnd?donate=true" target="_blank" rel="noreferrer" data-testid="link-support">Поддержать проект</a>
+            <a className="footer-icons-credit" href="https://www.flaticon.com/uicons" target="_blank" rel="noreferrer">Иконки: Flaticon UIcons</a>
           </div>
         </footer>
       </div>
@@ -484,7 +496,7 @@ function Home() {
           <div className="signal"><span className="signal-icon">01</span><span><strong>5 лет</strong><br />веду игры</span></div>
           <div className="signal"><span className="signal-icon">06</span><span><strong>игроков</strong><br />в одной группе</span></div>
           <div className="signal"><span className="signal-icon">∞</span><span><strong>100%</strong><br />живых решений</span></div>
-          <div className="signal"><span className="signal-icon">↗</span><span><strong>Москва</strong><br />и любой экран</span></div>
+          <div className="signal"><ArrowUpRight className="signal-icon" size={17} aria-hidden="true" /><span><strong>Москва</strong><br />и любой экран</span></div>
         </div>
 
         <section className="section" id="next" data-testid="next-game-section">
@@ -595,19 +607,23 @@ function CalendarPage({ initialView = 'month' }: { initialView?: CalendarView })
       const storyMatches = storyFilter === 'all' || game.storyType === storyFilter;
       const beginnerMatches = !beginnersOnly || !experience || /нович|любой|начин/.test(experience);
       return formatMatches && storyMatches && beginnerMatches;
-    });
+  });
   const weekGames = useMemo(() => filterGames(expandEvents(events, weekStart, addDays(weekStart, 6))), [beginnersOnly, events, formatFilter, storyFilter, weekStart]);
   const monthGridStart = startOfWeek(monthStart);
-  const monthGames = useMemo(() => filterGames(expandEvents(events, monthGridStart, addDays(monthGridStart, 41))), [beginnersOnly, events, formatFilter, monthGridStart, storyFilter]);
+  const monthGridEndDate = monthGridEnd(monthStart);
+  const monthGames = useMemo(() => filterGames(expandEvents(events, monthGridStart, monthGridEndDate)), [beginnersOnly, events, formatFilter, monthGridEndDate, monthGridStart, storyFilter]);
   const monthGamesByDate = useMemo(() => {
     const grouped = new Map<string, Game[]>();
     monthGames.forEach((game) => grouped.set(game.dateISO, [...(grouped.get(game.dateISO) ?? []), game]));
     return grouped;
   }, [monthGames]);
-  const monthDays = useMemo(() => Array.from({ length: 42 }, (_, index) => {
-    const date = addDays(monthGridStart, index);
-    return { date, games: monthGamesByDate.get(date) ?? [] };
-  }), [monthGamesByDate, monthGridStart]);
+  const monthDays = useMemo(() => {
+    const gridDays = Math.round((parseDateKey(monthGridEndDate).getTime() - parseDateKey(monthGridStart).getTime()) / 86400000) + 1;
+    return Array.from({ length: gridDays }, (_, index) => {
+      const date = addDays(monthGridStart, index);
+      return { date, games: monthGamesByDate.get(date) ?? [] };
+    });
+  }, [monthGridEndDate, monthGamesByDate, monthGridStart]);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => {
     const date = addDays(weekStart, index);
     return { date, label: weekDayLabels[index], name: formatDayName(date), games: weekGames.filter((game) => game.dateISO === date) };
