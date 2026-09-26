@@ -636,7 +636,7 @@
   .calendar-hero { padding: 28px 0 30px; }
   .calendar-view-switcher a { flex: 1; min-width: 0; }
   .calendar-month-weekdays, .calendar-month-grid { min-width: 620px; }
-  .calendar-month-day { min-height: 88px; }
+  .calendar-month-day { min-height: 92px; }
   .calendar-month-day-head { min-height: 24px; padding: 5px 6px 2px; }
   .calendar-month-day-body { padding: 2px 3px 5px; gap: 2px; }
   .calendar-month-event { padding: 3px 4px; }
