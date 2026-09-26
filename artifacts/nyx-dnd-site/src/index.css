@@ -641,7 +641,7 @@
 .calendar-month-day > header span { color: #f5eddc; font: 12px/1 var(--app-font-mono); }
 .calendar-month-day.is-today > header span { color: #d8ff55; font-weight: 700; }
 .calendar-month-day > div { display: grid; gap: 2px; max-height: calc(var(--calendar-month-row-height) - 32px); overflow: hidden; padding: 2px 5px 4px; }
-.calendar-month-event { min-width: 0; display: flex; align-items: baseline; gap: 4px; padding: 3px 5px; border: 1px solid #44344a; border-left: 2px solid #d8ff55; background: #292035; color: #f5eddc; overflow: hidden; text-decoration: none; transition: border-color .2s ease, background .2s ease; }
+.calendar-month-event { min-width: 0; min-height: 30px; display: flex; align-items: center; gap: 5px; padding: 7px 7px; border: 1px solid #44344a; border-left: 2px solid #d8ff55; background: #292035; color: #f5eddc; overflow: hidden; text-decoration: none; transition: border-color .2s ease, background .2s ease; }
 .calendar-month-event:hover, .calendar-month-event:focus-visible { border-color: #d8ff55; background: #342746; outline: none; }
 .calendar-month-event.is-past { opacity: .48; }
 .calendar-month-event time { flex: 0 0 auto; color: #ff716a; font: 8px/1.1 var(--app-font-mono); }
@@ -673,7 +673,7 @@
   .calendar-month-day { height: 112px; }
   .calendar-month-day > header { min-height: 22px; padding: 4px 6px 1px; }
   .calendar-month-day > div { max-height: calc(112px - 30px); padding: 2px 3px 3px; gap: 2px; }
-  .calendar-month-event { padding: 3px 4px; }
+  .calendar-month-event { min-height: 26px; padding: 5px 5px; }
   .calendar-month-event time { display: none; }
   .calendar-month-event > span { font-size: 8px; }
   .calendar-week-grid-scroll { width: auto; margin-inline: -20px; padding-inline: 20px; }
