@@ -4,6 +4,13 @@ const ROUTES = new Map([
   ['calendar', new Set(['GET'])],
   ['catalog', new Set(['GET'])],
   ['applications', new Set(['GET', 'POST'])],
+  ['telegram/webhook', new Set(['POST'])],
+  ['mini/session', new Set(['POST'])],
+  ['mini/me', new Set(['GET', 'PATCH'])],
+  ['mini/events', new Set(['GET'])],
+  ['mini/tags', new Set(['GET'])],
+  ['mini/games', new Set(['GET'])],
+  ['mini/rsvp', new Set(['POST'])],
   ['auth/login', new Set(['POST'])],
   ['auth/me', new Set(['GET'])],
   ['auth/logout', new Set(['POST'])],
@@ -12,7 +19,7 @@ const MAX_BODY_BYTES = 32 * 1024;
 
 function masterMethods(endpoint) {
   if (endpoint === 'master/catalog' || endpoint === 'master/events') return new Set(['GET', 'POST']);
-  if (endpoint === 'master/applications') return new Set(['GET']);
+  if (endpoint === 'master/applications' || endpoint === 'master/participants') return new Set(['GET']);
   if (/^master\/(catalog|events)\/[^/]+$/.test(endpoint)) return new Set(['PATCH', 'DELETE']);
   return null;
 }
@@ -45,7 +52,7 @@ async function proxy(context, endpoint) {
   const upstreamUrl = new URL(`/api/${endpoint}`, API_ORIGIN);
   upstreamUrl.search = incomingUrl.search;
   const headers = new Headers({ Accept: 'application/json' });
-  for (const name of ['Content-Type', 'Cookie', 'X-CSRF-Token', 'Origin']) {
+  for (const name of ['Content-Type', 'Cookie', 'X-CSRF-Token', 'X-Telegram-Init-Data', 'X-Telegram-Bot-Api-Secret-Token', 'Origin']) {
     const value = context.request.headers.get(name);
     if (value) headers.set(name, value);
   }

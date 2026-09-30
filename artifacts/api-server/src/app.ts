@@ -1,5 +1,8 @@
 import express, { type Express } from "express";
 import cors from "cors";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
@@ -9,12 +12,13 @@ const configuredOrigins = (process.env.ALLOWED_ORIGINS ?? "")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+const defaultProductionOrigin = (process.env.SITE_URL ?? "https://sait-madmuaziel-niks-final.pages.dev").replace(/\/$/, "");
 
 function isAllowedOrigin(origin: string | undefined) {
   if (!origin) return true;
   if (configuredOrigins.length > 0) return configuredOrigins.includes(origin);
   if (process.env.NODE_ENV !== "production") return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-  return origin === "https://dndmaster.dndmaster.workers.dev";
+  return origin === defaultProductionOrigin;
 }
 
 app.disable("x-powered-by");
@@ -62,5 +66,35 @@ app.use((_req, res, next) => {
 });
 
 app.use("/api", router);
+
+// In production the API process can also serve the Vite build. This keeps the
+// public site and its API on one origin, which is simpler to deploy on a VPS.
+const frontendDist = path.resolve(
+  process.env.STATIC_DIR ??
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../nyx-dnd-site/dist/public"),
+);
+const frontendIndex = path.join(frontendDist, "index.html");
+
+if (process.env.SERVE_FRONTEND !== "false" && existsSync(frontendIndex)) {
+  app.use(
+    express.static(frontendDist, {
+      redirect: false,
+      setHeaders(res, filePath) {
+        if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        }
+      },
+    }),
+  );
+
+  // Wouter handles client-side routes after the server returns index.html.
+  app.get(/^(?!\/api(?:\/|$)).*/, (req, res, next) => {
+    if (req.method !== "GET" || !req.accepts("html")) {
+      next();
+      return;
+    }
+    res.sendFile(frontendIndex);
+  });
+}
 
 export default app;

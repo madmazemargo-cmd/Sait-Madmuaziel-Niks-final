@@ -9,7 +9,7 @@ const router: IRouter = Router();
 
 const applicationsSourceUrl =
   process.env.APPLICATIONS_SOURCE_URL ??
-  "https://dndmaster.dndmaster.workers.dev/api/applications";
+  "https://madmuazelle-niks-api.dndmaster.workers.dev/api/applications";
 const sourceTimeoutMs = 10_000;
 const applicationWindowMs = 15 * 60 * 1000;
 const applicationLimit = 5;

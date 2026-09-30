@@ -12,6 +12,8 @@ export interface CalendarEvent {
   /** @pattern ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ */
   eventDate: string;
   startTime: string;
+  gameType?: 'campaign' | 'module' | 'oneshot' | string;
+  catalogItemId?: string | null;
   status: string;
   /** @nullable */
   seats: number | null;

@@ -1,8 +1,22 @@
+import {
+  handleMiniRequest,
+  handleTelegramWebhook,
+  readEventTags,
+  readMiniCapacity,
+  sendScheduledReminders,
+  setEventTags,
+  setMiniCapacity,
+} from './telegram-mini';
+
 export interface Env {
   DB: D1Database;
   ALLOWED_ORIGIN?: string;
   SESSION_PEPPER?: string;
   RATE_LIMITER?: DurableObjectNamespace;
+  TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_WEBHOOK_SECRET?: string;
+  MINI_APP_URL?: string;
+  GAME_TIMEZONE?: string;
 }
 
 type Row = Record<string, unknown>;
@@ -29,6 +43,44 @@ function nullableNumber(value: unknown) {
   return Number.isFinite(number) ? number : null;
 }
 
+type EventGameType = 'campaign' | 'module' | 'oneshot';
+
+function eventGameType(value: unknown): EventGameType {
+  const normalized = text(value, 40).toLowerCase().replace(/ё/g, 'е');
+  if (normalized === 'campaign' || normalized === 'campaigns' || normalized === 'кампания' || normalized === 'кампании') return 'campaign';
+  if (normalized === 'module' || normalized === 'модуль' || normalized === 'модули') return 'module';
+  return 'oneshot';
+}
+
+function isMissingSchemaFeature(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /no such table|no such column|does not exist/i.test(message);
+}
+
+async function setEventGameType(db: D1Database, eventId: string, value: unknown) {
+  try {
+    await db.prepare('UPDATE calendar_events SET game_type = ? WHERE id = ?').bind(eventGameType(value), eventId).run();
+  } catch (error) {
+    // Older installations do not have the optional game_type column.
+    if (!isMissingSchemaFeature(error)) throw error;
+  }
+}
+
+async function setEventCatalogItem(db: D1Database, eventId: string, value: unknown) {
+  try {
+    await db.prepare('UPDATE calendar_events SET catalog_item_id = ? WHERE id = ?').bind(text(value, 100) || null, eventId).run();
+  } catch (error) {
+    if (!isMissingSchemaFeature(error)) throw error;
+  }
+}
+
+function validMiniCapacity(value: unknown) {
+  if (value === undefined) return true;
+  if (value === null || value === '') return true;
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 0 && number <= 1000;
+}
+
 function legacyExcludedDates(row: Row) {
   const source = row.excluded_dates;
   const values = Array.isArray(source) ? source : typeof source === 'string' && source.trim() ? (() => {
@@ -44,7 +96,7 @@ function corsHeaders(request: Request, env: Env): HeadersInit {
     'Access-Control-Allow-Origin': allowed && origin === allowed ? allowed : (allowed ? '' : '*'),
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-CSRF-Token',
+    'Access-Control-Allow-Headers': 'Content-Type, X-CSRF-Token, X-Telegram-Init-Data',
     Vary: 'Origin',
   };
 }
@@ -115,7 +167,8 @@ function occursOn(row: Row, date: string) {
 }
 
 function toPublicEvent(row: Row): {
-  id: unknown; title: unknown; eventDate: unknown; startTime: unknown; status: unknown; seats: number | null;
+  id: unknown; title: unknown; eventDate: unknown; startTime: unknown; gameType: EventGameType; status: unknown; seats: number | null;
+  catalogItemId: string | null;
   description: unknown; system: unknown; format: unknown; location: unknown; duration: unknown; price: unknown;
   experience: unknown; age: unknown; playerPrep: unknown; archived: boolean; applicationUrl: string;
   recurrence: unknown; recurrenceUntil: string | null; excludedDates: string[]; revision: number;
@@ -123,7 +176,8 @@ function toPublicEvent(row: Row): {
   const recurrenceUntil = validDate(row.recurrence_until) ? row.recurrence_until : null;
   return {
     id: row.id, title: row.title, eventDate: row.event_date, startTime: row.start_time,
-    status: row.status, seats: nullableNumber(row.seats), description: row.description,
+    gameType: eventGameType(row.game_type), status: row.status, seats: nullableNumber(row.seats), description: row.description,
+    catalogItemId: typeof row.catalog_item_id === 'string' ? row.catalog_item_id : null,
     system: row.system, format: row.format, location: row.location, duration: row.duration,
     price: row.price, experience: row.experience, age: row.age, playerPrep: row.player_prep,
     archived: Boolean(row.archived), applicationUrl: '', recurrence: row.recurrence,
@@ -191,7 +245,20 @@ async function login(request: Request, env: Env) {
 
 async function masterEvents(env: Env) {
   const { results } = await env.DB.prepare('SELECT * FROM calendar_events ORDER BY event_date, start_time, id').all();
-  return { events: results.map((row) => ({ ...row, seats: nullableNumber((row as Row).seats), archived: Boolean((row as Row).archived), revision: Number((row as Row).revision ?? 1) })) };
+  const events = [];
+  for (const row of results) {
+    const value = row as Row;
+    events.push({
+      ...value,
+      game_type: eventGameType(value.game_type),
+      seats: nullableNumber(value.seats),
+      archived: Boolean(value.archived),
+      revision: Number(value.revision ?? 1),
+      tags: (await readEventTags(env.DB, String(value.id))).map((tag) => tag.slug),
+      miniCapacity: await readMiniCapacity(env.DB, String(value.id)),
+    });
+  }
+  return { events };
 }
 
 type CatalogType = 'campaign' | 'oneshot';
@@ -296,6 +363,8 @@ async function handle(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url); const path = url.pathname.replace(/\/$/, '') || '/';
   if (request.method === 'OPTIONS') return new Response(null, { status: 204 });
   if (request.method === 'GET' && path === '/api/healthz') return json({ status: 'ok' });
+  if (path === '/api/telegram/webhook') return request.method === 'POST' ? handleTelegramWebhook(request, env) : json({ error: 'Method not allowed.' }, 405, { Allow: 'POST, OPTIONS' });
+  if (path.startsWith('/api/mini/')) return handleMiniRequest(request, env);
   if (request.method === 'POST' && path === '/api/auth/login') return login(request, env);
   if (request.method === 'GET' && path === '/api/catalog') return json(await publicCatalog(env));
   if (request.method === 'GET' && path === '/api/calendar') return json(await publicCalendar(env));
@@ -334,6 +403,16 @@ async function handle(request: Request, env: Env): Promise<Response> {
     const { results } = await env.DB.prepare('SELECT * FROM applications ORDER BY created_at DESC LIMIT 200').all();
     return json({ applications: results });
   }
+  if (request.method === 'GET' && path === '/api/master/participants') {
+    const { results } = await env.DB.prepare(`SELECT p.event_id, p.occurrence_date, p.status, p.created_at,
+      u.telegram_user_id, u.username, u.first_name, u.last_name, e.title, e.start_time
+      FROM game_participants p
+      JOIN telegram_users u ON u.telegram_user_id = p.telegram_user_id
+      JOIN calendar_events e ON e.id = p.event_id
+      WHERE p.status IN ('confirmed', 'waitlist')
+      ORDER BY p.occurrence_date, e.start_time, e.title, p.created_at`).all();
+    return json({ participants: results });
+  }
   if (request.method === 'GET' && path === '/api/master/catalog') return json(await masterCatalog(env));
   if (request.method === 'POST' && path === '/api/master/catalog') {
     if (await requireCsrf(request, session)) return json({ error: 'Недействительный CSRF-токен.' }, 403);
@@ -369,8 +448,13 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if (request.method === 'POST' && path === '/api/master/events') {
     if (await requireCsrf(request, session)) return json({ error: 'Недействительный CSRF-токен.' }, 403);
     const body = await readBody(request); if (!isRecord(body) || !validDate(body.eventDate)) return json({ error: 'Укажите дату игры.' }, 400);
+    if (!validMiniCapacity(body.miniCapacity)) return json({ error: 'Вместимость мини‑аппа должна быть целым числом от 0 до 1000.' }, 400);
     const timestamp = nowIso(); const eventId = id();
     await env.DB.prepare(`INSERT INTO calendar_events (id, title, event_date, start_time, status, seats, description, system, format, location, duration, price, experience, age, player_prep, recurrence, recurrence_until, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(eventId, text(body.title, 200), body.eventDate, text(body.startTime, 20), text(body.status, 40) || 'available', body.seats === null || body.seats === undefined || body.seats === '' ? null : Number(body.seats), text(body.description, 4000), text(body.system, 200), text(body.format, 100), text(body.location, 200), text(body.duration, 100), text(body.price, 100), text(body.experience, 500), text(body.age, 100), text(body.playerPrep, 2000), text(body.recurrence, 30) || 'none', validDate(body.recurrenceUntil) ? body.recurrenceUntil : null, timestamp, timestamp).run();
+    await setEventGameType(env.DB, eventId, firstField(body, ['gameType', 'game_type', 'type'], 'oneshot'));
+    await setEventCatalogItem(env.DB, eventId, firstField(body, ['catalogItemId', 'catalog_item_id']));
+    await setEventTags(env.DB, eventId, body.tags);
+    await setMiniCapacity(env.DB, eventId, body.miniCapacity);
     return json({ id: eventId }, 201);
   }
   const match = path.match(/^\/api\/master\/events\/([^/]+)$/);
@@ -381,10 +465,20 @@ async function handle(request: Request, env: Env): Promise<Response> {
     if (!current) return json({ error: 'Игра не найдена.' }, 404);
     if (request.method === 'DELETE') { await env.DB.prepare('UPDATE calendar_events SET archived = 1, revision = revision + 1, updated_at = ? WHERE id = ?').bind(nowIso(), eventId).run(); return json({ ok: true }); }
     if (!isRecord(body)) return json({ error: 'Некорректные данные.' }, 400);
+    if (Object.prototype.hasOwnProperty.call(body, 'miniCapacity') && !validMiniCapacity(body.miniCapacity)) return json({ error: 'Вместимость мини‑аппа должна быть целым числом от 0 до 1000.' }, 400);
     const fields: [string, unknown][] = [['title', text(body.title, 200)], ['event_date', validDate(body.eventDate) ? body.eventDate : null], ['start_time', text(body.startTime, 20)], ['status', text(body.status, 40)], ['seats', body.seats === null || body.seats === '' ? null : Number(body.seats)], ['description', text(body.description, 4000)], ['system', text(body.system, 200)], ['format', text(body.format, 100)], ['location', text(body.location, 200)], ['duration', text(body.duration, 100)], ['price', text(body.price, 100)], ['experience', text(body.experience, 500)], ['age', text(body.age, 100)], ['player_prep', text(body.playerPrep, 2000)], ['recurrence', text(body.recurrence, 30)], ['recurrence_until', validDate(body.recurrenceUntil) ? body.recurrenceUntil : null]];
     const set = fields.filter(([, value]) => value !== null || Object.keys(body).some((key) => key === 'eventDate' || key === 'recurrenceUntil')).map(([key]) => `${key} = ?`).join(', '); const values = fields.filter(([, value]) => value !== null || Object.keys(body).some((key) => key === 'eventDate' || key === 'recurrenceUntil')).map(([, value]) => value);
     const result = await env.DB.prepare(`UPDATE calendar_events SET ${set}, revision = revision + 1, updated_at = ? WHERE id = ? AND revision = ?`).bind(...values, nowIso(), eventId, Number(body.revision ?? 0)).run();
-    return result.meta.changes ? json({ ok: true }) : json({ error: 'Запись уже изменилась. Обновите страницу.' }, 409);
+    if (!result.meta.changes) return json({ error: 'Запись уже изменилась. Обновите страницу.' }, 409);
+    if (Object.prototype.hasOwnProperty.call(body, 'gameType') || Object.prototype.hasOwnProperty.call(body, 'game_type') || Object.prototype.hasOwnProperty.call(body, 'type')) {
+      await setEventGameType(env.DB, eventId, firstField(body, ['gameType', 'game_type', 'type'], 'oneshot'));
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'catalogItemId') || Object.prototype.hasOwnProperty.call(body, 'catalog_item_id')) {
+      await setEventCatalogItem(env.DB, eventId, firstField(body, ['catalogItemId', 'catalog_item_id']));
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'tags')) await setEventTags(env.DB, eventId, body.tags);
+    if (Object.prototype.hasOwnProperty.call(body, 'miniCapacity')) await setMiniCapacity(env.DB, eventId, body.miniCapacity);
+    return json({ ok: true });
   }
   return json({ error: 'Not found' }, 404);
 }
@@ -402,6 +496,9 @@ export default {
       }));
       return secure(json({ error: 'Внутренняя ошибка сервера.' }, 500), request, env);
     }
+  },
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(sendScheduledReminders(env));
   },
 };
 

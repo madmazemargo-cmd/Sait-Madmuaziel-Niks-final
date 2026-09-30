@@ -13,6 +13,7 @@
 - Build output directory: `artifacts/nyx-dnd-site/dist/public`;
 - Root directory: `/`;
 - Environment variable `BASE_PATH`: `/`;
+- Environment variable `SITE_URL`: the exact public Pages URL, for example `https://<project>.pages.dev`;
 - `VITE_API_BASE_URL` для Pages не нужен: календарь, каталог и заявки проксируются однодоменной Pages Function из `/functions/api/[[path]].js`.
 
 После деплоя Cloudflare выдаст адрес вида `https://<project>.pages.dev`. Pages Function работает на том же адресе, поэтому отдельная настройка CORS для фронтенда не нужна.
@@ -48,6 +49,8 @@ pnpm exec wrangler d1 migrations list dndmaster-calendar --remote --config cloud
 
 Сначала примените миграции, затем задеплойте Worker (`pnpm run deploy` из `cloudflare/api-worker`), чтобы новый `/api/catalog` сразу видел таблицу `catalog_items`. Не удаляйте legacy-таблицу до проверки витрины и мастерского CRUD.
 
+Миграция `0004_calendar_catalog_link.sql` добавляет связь календарной встречи с карточкой каталога. Она позволяет показывать в подробностях календаря обложку и описание выбранной игры; примените её вместе с остальными ожидающими миграциями до деплоя Worker.
+
 Также замените `ALLOWED_ORIGIN` на фактический Pages URL, если адрес Pages отличается от указанного в конфигурации. Календарь, каталог и заявки читаются из привязанной D1-базы.
 
 ## 3. Проверьте Worker
@@ -73,3 +76,7 @@ curl https://<worker>.workers.dev/api/calendar
 - `artifacts/nyx-dnd-site/public/robots.txt`;
 - `artifacts/nyx-dnd-site/public/sitemap.xml`;
 - `cloudflare/api-worker/wrangler.toml` (`ALLOWED_ORIGIN`).
+
+## 6. Telegram Mini App
+
+После базовой настройки Pages и Worker выполните шаги из [`TELEGRAM_MINI_APP.md`](../TELEGRAM_MINI_APP.md): примените миграцию `0003_telegram_mini_app.sql`, задайте Telegram-секреты, задеплойте Worker с cron и зарегистрируйте webhook. Само приложение доступно на `/mini`, а новые API-маршруты проксируются той же Pages Function.

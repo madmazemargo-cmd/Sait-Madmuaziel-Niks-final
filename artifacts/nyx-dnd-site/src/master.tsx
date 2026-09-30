@@ -3,10 +3,10 @@ import { ArrowLeft, BookOpen, CalendarDays, LogOut, Pencil, Plus, RefreshCw, Sav
 import { Link, Route, Switch, useLocation } from 'wouter';
 
 type MasterEvent = {
-  id: string; title: string; event_date: string; start_time: string; status: string; seats: number | null;
+  id: string; title: string; event_date: string; start_time: string; game_type: 'campaign' | 'module' | 'oneshot'; status: string; seats: number | null;
   description: string; system: string; format: string; location: string; duration: string; price: string;
   experience: string; age: string; player_prep: string; recurrence: string; recurrence_until: string | null;
-  archived: boolean; revision: number;
+  catalog_item_id: string | null; tags: string[]; miniCapacity: number | null; archived: boolean; revision: number;
 };
 type FormState = Omit<MasterEvent, 'id' | 'archived' | 'revision'>;
 type CatalogItem = {
@@ -25,7 +25,7 @@ function masterStartOfMonth(value: string) { const date = masterDate(value); dat
 function masterEndOfMonth(value: string) { const date = masterDate(masterStartOfMonth(value)); date.setUTCMonth(date.getUTCMonth() + 1); date.setUTCDate(0); return masterDateKey(date); }
 function masterMonthGridEnd(value: string) { return masterAddDays(masterStartOfWeek(masterEndOfMonth(value)), 6); }
 function masterOccursOn(event: MasterEvent, date: string) { if (date < event.event_date || event.archived) return false; if (event.recurrence === 'none') return date === event.event_date; if (event.recurrence_until && date > event.recurrence_until) return false; const days = Math.round((masterDate(date).getTime() - masterDate(event.event_date).getTime()) / 86400000); if (event.recurrence === 'daily') return true; if (event.recurrence === 'weekly') return days % 7 === 0; if (event.recurrence === 'biweekly') return days % 14 === 0; if (event.recurrence === 'monthly') return masterDate(date).getUTCDate() === masterDate(event.event_date).getUTCDate(); return false; }
-const emptyForm: FormState = { title: '', event_date: '', start_time: '', status: 'available', seats: null, description: '', system: '', format: 'online', location: '', duration: '', price: '', experience: '', age: '18+', player_prep: '', recurrence: 'none', recurrence_until: null };
+const emptyForm: FormState = { title: '', event_date: '', start_time: '', game_type: 'oneshot', status: 'available', seats: null, description: '', system: '', format: 'online', location: '', duration: '', price: '', experience: '', age: '18+', player_prep: '', recurrence: 'none', recurrence_until: null, catalog_item_id: null, tags: [], miniCapacity: null };
 const emptyCatalogForm: CatalogForm = { systemKey: 'dnd', title: '', description: '', imageUrl: '', age: '18+', format: 'online', price: '', gameType: 'oneshot', status: '', sortOrder: 0, published: true };
 const catalogSystemLabels: Record<string, string> = { dnd: 'Dungeons & Dragons', vampires: 'Вампиры: Маскарад', daggerheart: 'Daggerheart', cyberpunk: 'Cyberpunk 2020', cthulhu: 'Зов Ктулху' };
 function catalogSystemLabel(value: string) { return catalogSystemLabels[value] ?? value; }
@@ -38,6 +38,20 @@ function catalogFormatLabel(value: string) {
   return value.trim();
 }
 
+const eventTypeLabels: Record<MasterEvent['game_type'], string> = { campaign: 'Кампания', module: 'Модуль', oneshot: 'Ваншот' };
+const eventStatusLabels: Record<string, string> = {
+  available: 'Идёт набор',
+  closed: 'Набор закрыт',
+  frozen: 'Игра заморожена',
+  day_off: 'Выходной',
+  children_group: 'Детская группа',
+  waiting: 'Лист ожидания',
+  ongoing: 'Идёт набор',
+  open_slot: 'Свободный слот',
+};
+function eventTypeLabel(value: MasterEvent['game_type']) { return eventTypeLabels[value] ?? 'Ваншот'; }
+function eventStatusLabel(value: string) { return eventStatusLabels[value] ?? value; }
+
 async function api<T>(path: string, init: RequestInit = {}) {
   const response = await fetch(path, { ...init, credentials: 'include', headers: { Accept: 'application/json', ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...(init.headers ?? {}) } });
   const data = await response.json().catch(() => ({}));
@@ -45,7 +59,7 @@ async function api<T>(path: string, init: RequestInit = {}) {
   return data as T;
 }
 
-function LoginPage() {
+function LoginPage({ onAuthenticated }: { onAuthenticated: (session: Session) => void }) {
   const [location, navigate] = useLocation(); const [login, setLogin] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState(''); const [pending, setPending] = useState(false);
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -53,6 +67,8 @@ function LoginPage() {
     setError('');
     try {
       await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ login, password }) });
+      const session = await api<Session>('/api/auth/me');
+      onAuthenticated(session);
       const requestedPath = location.replace(/\/+$/, '');
       const destination = requestedPath.startsWith('/master/') && requestedPath !== '/master/login' ? requestedPath : '/master/calendar';
       navigate(destination, { replace: true });
@@ -101,11 +117,100 @@ function MasterOverlay({ onDismiss, children }: { onDismiss: () => void; childre
 }
 
 function EventEditor({ event, session, onSaved, onCancel }: { event: MasterEvent | null; session: Session; onSaved: () => void; onCancel: () => void }) {
-  const [form, setForm] = useState<FormState>(event ? { title: event.title, event_date: event.event_date, start_time: event.start_time, status: event.status, seats: event.seats, description: event.description, system: event.system, format: event.format, location: event.location, duration: event.duration, price: event.price, experience: event.experience, age: event.age, player_prep: event.player_prep, recurrence: event.recurrence, recurrence_until: event.recurrence_until } : emptyForm);
-  const [error, setError] = useState(''); const set = (key: keyof FormState, value: string | number | null) => setForm((current) => ({ ...current, [key]: value }));
+  const [form, setForm] = useState<FormState>(event ? {
+    title: event.title,
+    event_date: event.event_date,
+    start_time: event.start_time,
+    game_type: event.game_type ?? 'oneshot',
+    status: event.status,
+    seats: event.seats,
+    description: event.description,
+    system: event.system,
+    format: event.format,
+    location: event.location,
+    duration: event.duration,
+    price: event.price,
+    experience: event.experience,
+    age: event.age,
+    player_prep: event.player_prep,
+    recurrence: event.recurrence,
+    recurrence_until: event.recurrence_until,
+    catalog_item_id: event.catalog_item_id ?? null,
+    tags: event.tags ?? [],
+    miniCapacity: event.miniCapacity ?? null,
+  } : emptyForm);
+  const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
+  const [error, setError] = useState('');
+  const [catalogError, setCatalogError] = useState('');
+  const [pending, setPending] = useState(false);
+  const set = (key: keyof FormState, value: string | number | null | string[]) => setForm((current) => ({ ...current, [key]: value }));
+
+  useEffect(() => {
+    let active = true;
+    api<{ items: CatalogItem[] }>('/api/master/catalog')
+      .then((data) => { if (active) setCatalogItems(data.items); })
+      .catch(() => { if (active) setCatalogError('Не удалось загрузить каталог для связи с игрой.'); });
+    return () => { active = false; };
+  }, []);
   useEditorDismiss(onCancel);
-  async function submit(eventObject: FormEvent) { eventObject.preventDefault(); setError(''); const payload = { ...form, playerPrep: form.player_prep, eventDate: form.event_date, startTime: form.start_time, recurrenceUntil: form.recurrence_until, seats: form.seats === null ? null : Number(form.seats) }; try { await api(event ? `/api/master/events/${event.id}` : '/api/master/events', { method: event ? 'PATCH' : 'POST', headers: { 'X-CSRF-Token': session.csrfToken ?? '' }, body: JSON.stringify(event ? { ...payload, revision: event.revision } : payload) }); onSaved(); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Не удалось сохранить игру.'); } }
-  return <form className="master-editor" role="dialog" aria-modal="true" onSubmit={submit}><div className="master-editor-head"><div><span className="eyebrow">{event ? 'редактирование' : 'новая запись'}</span><h2>{event ? 'Изменить игру' : 'Добавить игру'}</h2></div><button type="button" className="master-icon-button" onClick={onCancel} aria-label="Закрыть"><X size={15} /></button></div><div className="master-fields"><label>Название<input value={form.title} onChange={(e) => set('title', e.target.value)} required /></label><label>Дата<input type="date" value={form.event_date} onChange={(e) => set('event_date', e.target.value)} required /></label><label>Время<input type="time" value={form.start_time} onChange={(e) => set('start_time', e.target.value)} /></label><label>Статус<select value={form.status} onChange={(e) => set('status', e.target.value)}><option value="available">Открыта</option><option value="waiting">Лист ожидания</option><option value="closed">Закрыта</option><option value="ongoing">Кампания идёт</option><option value="day_off">Выходной</option><option value="children_group">Детская группа</option><option value="open_slot">Свободный слот</option></select></label><label>Свободных мест<input type="number" min="0" value={form.seats ?? ''} onChange={(e) => set('seats', e.target.value === '' ? null : Number(e.target.value))} /></label><label>Повторение<select value={form.recurrence} onChange={(e) => set('recurrence', e.target.value)}><option value="none">Без повторения</option><option value="daily">Каждый день</option><option value="weekly">Каждую неделю</option><option value="biweekly">Раз в две недели</option><option value="monthly">Каждый месяц</option></select></label><label>Повторять до<input type="date" value={form.recurrence_until ?? ''} onChange={(e) => set('recurrence_until', e.target.value || null)} /></label><label>Система<input value={form.system} onChange={(e) => set('system', e.target.value)} placeholder="D&D 5e" /></label><label>Формат<select value={form.format} onChange={(e) => set('format', e.target.value)}><option value="online">Онлайн</option><option value="offline">Очно</option></select></label><label>Место<input value={form.location} onChange={(e) => set('location', e.target.value)} /></label><label>Цена<input value={form.price} onChange={(e) => set('price', e.target.value)} placeholder="1500 ₽" /></label><label>Возраст<input value={form.age} onChange={(e) => set('age', e.target.value)} /></label><label className="full">Описание<textarea value={form.description} onChange={(e) => set('description', e.target.value)} rows={4} /></label><label className="full">Для игроков<textarea value={form.player_prep} onChange={(e) => set('player_prep', e.target.value)} rows={3} /></label></div>{error && <div className="master-error" role="alert">{error}</div>}<div className="master-editor-actions"><button type="button" className="button button-ghost" onClick={onCancel}>Отменить</button><button className="button button-primary"><Save size={15} /> Сохранить</button></div></form>;
+
+  async function submit(eventObject: FormEvent) {
+    eventObject.preventDefault();
+    setError('');
+    setPending(true);
+    const payload = {
+      ...form,
+      playerPrep: form.player_prep,
+      eventDate: form.event_date,
+      startTime: form.start_time,
+      recurrenceUntil: form.recurrence_until,
+      seats: form.seats === null ? null : Number(form.seats),
+      tags: form.tags,
+      miniCapacity: form.miniCapacity === null ? null : Number(form.miniCapacity),
+    };
+    try {
+      await api(event ? '/api/master/events/' + event.id : '/api/master/events', {
+        method: event ? 'PATCH' : 'POST',
+        headers: { 'X-CSRF-Token': session.csrfToken ?? '' },
+        body: JSON.stringify(event ? { ...payload, revision: event.revision } : payload),
+      });
+      onSaved();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Не удалось сохранить игру.');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return <form className="master-editor" role="dialog" aria-modal="true" onSubmit={submit}>
+    <div className="master-editor-head">
+      <div><span className="eyebrow">{event ? 'редактирование' : 'новая запись'}</span><h2>{event ? 'Изменить игру' : 'Добавить игру'}</h2></div>
+      <button type="button" className="master-icon-button" onClick={onCancel} aria-label="Закрыть"><X size={15} /></button>
+    </div>
+    <div className="master-fields">
+      <label>Название<input value={form.title} onChange={(e) => set('title', e.target.value)} placeholder="Можно оставить пустым для выходного" /></label>
+      <label>Дата<input type="date" value={form.event_date} onChange={(e) => set('event_date', e.target.value)} required /></label>
+      <label>Время игрового слота<input type="time" value={form.start_time} onChange={(e) => set('start_time', e.target.value)} /></label>
+      <label>Тип игры<select value={form.game_type} onChange={(e) => set('game_type', e.target.value as FormState['game_type'])}><option value="campaign">Кампания</option><option value="module">Модуль</option><option value="oneshot">Ваншот</option></select></label>
+      <label>Статус<select value={form.status} onChange={(e) => set('status', e.target.value)}><option value="available">Идёт набор</option><option value="closed">Набор закрыт</option><option value="frozen">Игра заморожена</option><option value="day_off">Выходной</option><option value="children_group">Детская группа</option><option value="waiting">Лист ожидания</option><option value="open_slot">Свободный слот</option></select></label>
+      <label>Карточка игры из каталога<select value={form.catalog_item_id ?? ''} onChange={(e) => set('catalog_item_id', e.target.value || null)}><option value="">Без связи</option>{catalogItems.map((item) => <option key={item.id} value={item.id}>{item.title} · {catalogSystemLabel(item.systemKey)}</option>)}</select></label>
+      <label>Свободных мест<input type="number" min="0" value={form.seats ?? ''} onChange={(e) => set('seats', e.target.value === '' ? null : Number(e.target.value))} /></label>
+      <label>Лимит участников в мини‑аппе<input type="number" min="0" max="1000" value={form.miniCapacity ?? ''} onChange={(e) => set('miniCapacity', e.target.value === '' ? null : Number(e.target.value))} /></label>
+      <label>Теги для уведомлений<input value={form.tags.join(', ')} onChange={(e) => set('tags', e.target.value.split(',').map((tag) => tag.trim()).filter(Boolean))} placeholder="dnd, новичкам, хоррор" /></label>
+      <label>Повторение<select value={form.recurrence} onChange={(e) => set('recurrence', e.target.value)}><option value="none">Без повторения</option><option value="daily">Каждый день</option><option value="weekly">Каждую неделю</option><option value="biweekly">Раз в две недели</option><option value="monthly">Каждый месяц</option></select></label>
+      <label>Повторять до<input type="date" value={form.recurrence_until ?? ''} onChange={(e) => set('recurrence_until', e.target.value || null)} /></label>
+      <label>Система<input value={form.system} onChange={(e) => set('system', e.target.value)} placeholder="D&D 5e" /></label>
+      <label>Формат<select value={form.format} onChange={(e) => set('format', e.target.value)}><option value="online">Онлайн</option><option value="offline">Очно</option></select></label>
+      <label>Место<input value={form.location} onChange={(e) => set('location', e.target.value)} /></label>
+      <label>Цена<input value={form.price} onChange={(e) => set('price', e.target.value)} placeholder="1500 ₽" /></label>
+      <label>Возраст<input value={form.age} onChange={(e) => set('age', e.target.value)} /></label>
+      <label className="full">Описание<textarea value={form.description} onChange={(e) => set('description', e.target.value)} rows={4} /></label>
+      <label className="full">Для игроков<textarea value={form.player_prep} onChange={(e) => set('player_prep', e.target.value)} rows={3} /></label>
+    </div>
+    {catalogError && <div className="master-error" role="status">{catalogError}</div>}
+    {error && <div className="master-error" role="alert">{error}</div>}
+    <div className="master-editor-actions"><button type="button" className="button button-ghost" onClick={onCancel}>Отменить</button><button className="button button-primary" disabled={pending}><Save size={15} /> {pending ? 'Сохраняю…' : 'Сохранить'}</button></div>
+  </form>;
 }
 
 function CatalogEditor({ item, session, onSaved, onCancel }: { item: CatalogItem | null; session: Session; onSaved: () => void; onCancel: () => void }) {
@@ -210,7 +315,20 @@ function CalendarPage({ session }: { session: Session }) {
   return <MasterLayout session={session}><section className="master-content"><div className="master-heading"><div><span className="eyebrow">расписание</span><h1>Календарь<br /><em>игр</em></h1></div><button className="button button-primary" onClick={() => setEditing(null)}><Plus size={16} /> Добавить игру</button></div>{error && <div className="master-error">{error}</div>}<div className="master-toolbar"><span>Все записи: {visibleEvents.length}</span><div className="master-view-actions"><button type="button" className={view === 'week' ? 'is-active' : ''} onClick={() => { setView('week'); setCursor(masterStartOfWeek(cursor)); }}>Неделя</button><button type="button" className={view === 'month' ? 'is-active' : ''} onClick={() => { setView('month'); setCursor(masterStartOfMonth(cursor)); }}>Месяц</button><button type="button" onClick={() => shift(-1)} aria-label="Назад">←</button><button type="button" onClick={() => setCursor(view === 'week' ? masterStartOfWeek(new Date().toISOString().slice(0, 10)) : masterStartOfMonth(new Date().toISOString().slice(0, 10)))} aria-label="Сегодня">Сегодня</button><button type="button" onClick={() => shift(1)} aria-label="Вперёд">→</button><button type="button" onClick={load}><RefreshCw size={14} /> Обновить</button></div></div><div className="master-calendar-grid">{days.map((day) => <section className="master-calendar-day" key={day.date}><header><span>{day.label}</span><strong>{day.date.slice(8)}</strong></header><div>{day.events.map((event) => <article className="master-calendar-event" key={`${event.id}:${day.date}`}><div><b>{event.start_time || '—'}</b><strong>{event.title || 'Без названия'}</strong><small>{event.status} · {event.system || 'без системы'}</small></div><span className="master-calendar-event-actions"><button type="button" onClick={() => setEditing(event)} aria-label="Редактировать"><Pencil size={13} /></button><button type="button" onClick={() => remove(event)} aria-label="Удалить"><Trash2 size={13} /></button></span></article>)}</div></section>)}</div><div className="master-events">{events.filter((event) => !event.archived).map((event) => <article className="master-event-card" key={event.id}><div className="master-event-date"><strong>{event.event_date.slice(8)}</strong><span>{event.event_date.slice(0, 7)}</span></div><div className="master-event-info"><span className="master-status">{event.status}</span><h2>{event.title || 'Без названия'}</h2><p>{event.start_time || 'Время не указано'} · {event.system || 'Система не указана'} · {event.format || 'Формат не указан'}</p></div><div className="master-event-actions"><button type="button" onClick={() => setEditing(event)} aria-label="Редактировать"><Pencil size={15} /></button><button type="button" onClick={() => remove(event)} aria-label="Удалить"><Trash2 size={15} /></button></div></article>)}{!events.length && <div className="master-empty">Календарь пока пуст. Добавьте первую игру.</div>}</div></section>{editing !== undefined && <MasterOverlay onDismiss={() => setEditing(undefined)}><EventEditor event={editing} session={session} onSaved={() => { setEditing(undefined); load(); }} onCancel={() => setEditing(undefined)} /></MasterOverlay>}</MasterLayout>;
 }
 
-function ApplicationsPage({ session }: { session: Session }) { const [applications, setApplications] = useState<any[]>([]); useEffect(() => { api<{ applications: any[] }>('/api/master/applications').then((data) => setApplications(data.applications)).catch(() => undefined); }, []); return <MasterLayout session={session}><section className="master-content"><div className="master-heading"><div><span className="eyebrow">входящие</span><h1>Заявки<br /><em>игроков</em></h1></div></div><div className="master-applications">{applications.map((item) => <article className="master-application" key={item.id}><div><span>{new Date(item.created_at).toLocaleString('ru-RU')}</span><h2>{item.name}</h2><a href={`https://t.me/${String(item.contact).replace(/^@/, '')}`} target="_blank" rel="noreferrer">{item.contact}</a></div><p>{item.wishes || item.system || 'Без дополнительных пожеланий'}</p><strong>{item.players} игроков</strong></article>)}{!applications.length && <div className="master-empty">Новых заявок пока нет.</div>}</div></section></MasterLayout>; }
+function ApplicationsPage({ session }: { session: Session }) {
+  const [applications, setApplications] = useState<any[]>([]);
+  const [participants, setParticipants] = useState<any[]>([]);
+  useEffect(() => {
+    Promise.all([
+      api<{ applications: any[] }>('/api/master/applications'),
+      api<{ participants: any[] }>('/api/master/participants'),
+    ]).then(([applicationData, participantData]) => {
+      setApplications(applicationData.applications);
+      setParticipants(participantData.participants);
+    }).catch(() => undefined);
+  }, []);
+  return <MasterLayout session={session}><section className="master-content"><div className="master-heading"><div><span className="eyebrow">входящие</span><h1>Заявки<br /><em>игроков</em></h1></div></div><div className="master-applications"><div className="master-subheading"><span className="eyebrow">из мини‑аппа</span><h2>Записи на игры</h2></div>{participants.map((item) => <article className="master-application" key={`${item.event_id}:${item.occurrence_date}:${item.telegram_user_id}`}><div><span>{item.occurrence_date} · {item.start_time || 'время уточняется'}</span><h2>{item.title || 'Игра'}</h2><strong>{[item.first_name, item.last_name].filter(Boolean).join(' ') || 'Игрок'}{item.username ? ` · @${item.username}` : ''}</strong></div><p>{item.status === 'waitlist' ? 'Лист ожидания' : 'Подтверждено'}</p></article>)}{!participants.length && <div className="master-empty">Записей из мини‑аппа пока нет.</div>}</div><div className="master-applications"><div className="master-subheading"><span className="eyebrow">веб‑форма</span><h2>Заявки игроков</h2></div>{applications.map((item) => <article className="master-application" key={item.id}><div><span>{new Date(item.created_at).toLocaleString('ru-RU')}</span><h2>{item.name}</h2><a href={`https://t.me/${String(item.contact).replace(/^@/, '')}`} target="_blank" rel="noreferrer">{item.contact}</a></div><p>{item.wishes || item.system || 'Без дополнительных пожеланий'}</p><strong>{item.players} игроков</strong></article>)}{!applications.length && <div className="master-empty">Новых заявок пока нет.</div>}</div></section></MasterLayout>;
+}
 
 export default function MasterRoutes() {
   const [location] = useLocation();
@@ -232,8 +350,13 @@ export default function MasterRoutes() {
     return () => { active = false; };
   }, [location]);
 
-  if (location === '/master/login') return <LoginPage />;
+  const acceptLogin = (authenticatedSession: Session) => {
+    setSession(authenticatedSession);
+    setAuthPending(false);
+  };
+
+  if (location === '/master/login') return <LoginPage onAuthenticated={acceptLogin} />;
   if (authPending) return <main className="master-shell master-loading" role="status" aria-live="polite">Проверяем сессию…</main>;
-  if (!session) return <Switch><Route path="/master/login" component={LoginPage} /><Route><LoginPage /></Route></Switch>;
+  if (!session) return <Switch><Route path="/master/login"><LoginPage onAuthenticated={acceptLogin} /></Route><Route><LoginPage onAuthenticated={acceptLogin} /></Route></Switch>;
   return <Switch><Route path="/master/calendar"><CalendarPage session={session} /></Route><Route path="/master/catalog"><CatalogPage session={session} /></Route><Route path="/master/applications"><ApplicationsPage session={session} /></Route><Route><CalendarPage session={session} /></Route></Switch>;
 }

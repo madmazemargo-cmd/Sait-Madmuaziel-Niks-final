@@ -11,3 +11,5 @@
 @media (prefers-reduced-motion: reduce) {
   .master-overlay, .master-editor { animation: none; }
 }
+.master-subheading{margin:34px 0 8px}.master-subheading h2{font:600 32px/.95 var(--app-font-serif);margin:8px 0;color:#f5eddc}
+.master-calendar-grid + .master-events { display: none; }

@@ -22,6 +22,9 @@ await expectJsonList('catalog', 'items');
 const unknown = await call('unknown');
 if (unknown.status !== 404) throw new Error(`Expected 404, received ${unknown.status}`);
 
+const miniMethod = await call('mini/session');
+if (miniMethod.status !== 405) throw new Error(`Expected mini session GET to be rejected, received ${miniMethod.status}`);
+
 const oversized = await call('applications', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', 'Content-Length': '40000' },

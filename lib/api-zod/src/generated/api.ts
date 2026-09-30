@@ -31,6 +31,8 @@ export const GetCalendarResponse = zod.object({
   "title": zod.string(),
   "eventDate": zod.string().regex(getCalendarResponseEventsItemEventDateRegExp),
   "startTime": zod.string(),
+  "gameType": zod.string().optional(),
+  "catalogItemId": zod.string().nullable().optional(),
   "status": zod.string(),
   "seats": zod.number().int().nullable(),
   "description": zod.string(),

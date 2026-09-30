@@ -5,6 +5,11 @@ compatibility_date = "2026-09-20"
 [vars]
 # Set this to the exact public origin in the Cloudflare dashboard for production.
 ALLOWED_ORIGIN = "https://sait-madmuaziel-niks-final.pages.dev"
+MINI_APP_URL = "https://sait-madmuaziel-niks-final.pages.dev/mini"
+GAME_TIMEZONE = "Europe/Moscow"
+
+[triggers]
+crons = ["*/5 * * * *"]
 
 [[d1_databases]]
 binding = "DB"

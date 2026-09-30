@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type AnchorHTMLAttributes, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { createPortal } from 'react-dom';
 import { ArrowUpRight, Check, Menu, X } from '@/components/flaticon-icons';
 import { Link, Route, Switch, Router as WouterRouter, useLocation, useSearch } from 'wouter';
 import {
@@ -15,6 +16,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
 import MasterRoutes from '@/master';
+import MiniApp from '@/mini';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,6 +31,7 @@ const queryClient = new QueryClient({
 type Game = {
   id: string;
   eventId: string;
+  catalogItemId: string | null;
   title: string;
   system: string;
   dateISO: string;
@@ -42,14 +45,21 @@ type Game = {
   status: string;
   seats: number | null;
   format: string;
+  gameType: 'campaign' | 'module' | 'oneshot';
   storyType: 'campaign' | 'oneshot';
   experience: string;
+  duration: string;
+  age: string;
+  playerPrep: string;
 };
 
 const calendarOnlyStatuses = new Set(['day_off', 'children_group', 'open_slot']);
 const weekDayLabels = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'];
 
 function storyTypeForEvent(event: CalendarEvent): 'campaign' | 'oneshot' {
+  const gameType = (event as CalendarEvent & { gameType?: Game['gameType'] }).gameType;
+  if (gameType === 'oneshot') return 'oneshot';
+  if (gameType === 'campaign' || gameType === 'module') return 'campaign';
   const source = `${event.title} ${event.description} ${event.duration}`.toLowerCase();
   return event.status === 'ongoing' || source.includes('кампан') || source.includes('серия') || source.includes('сезон') ? 'campaign' : 'oneshot';
 }
@@ -170,14 +180,16 @@ function eventOccursOn(event: CalendarEvent, date: string) {
 
 function toGame(event: CalendarEvent, occurrenceDate: string): Game {
   const title = event.title || (event.status === 'day_off' ? 'Выходной' : event.status === 'children_group' ? 'Детская группа' : 'Свободный слот');
+  const gameType = (event as CalendarEvent & { gameType?: Game['gameType'] }).gameType;
   return {
     id: `${event.id}:${occurrenceDate}`,
     eventId: event.id,
+    catalogItemId: event.catalogItemId ?? null,
     title,
     system: event.system || 'Авторская игра',
     dateISO: occurrenceDate,
     date: formatDate(occurrenceDate),
-    time: event.status === 'open_slot' || event.status === 'day_off' ? '—' : event.startTime || 'Уточняется',
+    time: event.status === 'day_off' ? '—' : event.startTime || 'Время уточняется',
     place: formatPlace(event),
     price: event.price || 'Уточняется',
     spots: formatSpots(event.seats),
@@ -186,8 +198,12 @@ function toGame(event: CalendarEvent, occurrenceDate: string): Game {
     status: event.status,
     seats: event.seats,
     format: event.format,
+    gameType: gameType === 'campaign' || gameType === 'module' || gameType === 'oneshot' ? gameType : storyTypeForEvent(event),
     storyType: storyTypeForEvent(event),
     experience: event.experience,
+    duration: event.duration,
+    age: event.age,
+    playerPrep: event.playerPrep,
   };
 }
 
@@ -214,9 +230,20 @@ function availabilityLabel(game: Game) {
   if (game.status === 'children_group') return 'Детская группа';
   if (game.status === 'open_slot') return 'Свободный слот';
   if (game.status === 'ongoing') return 'Кампания идёт';
-  if (game.status === 'closed') return 'В заморозке';
+  if (game.status === 'closed') return 'Набор закрыт';
+  if (game.status === 'frozen') return 'Игра заморожена';
   if (game.status === 'waiting') return 'Лист ожидания';
   return game.spots;
+}
+
+function gameStatusLabel(game: Game) {
+  return game.status === 'available' ? 'Идёт набор' : availabilityLabel(game);
+}
+
+function gameTypeLabel(gameType: Game['gameType']) {
+  if (gameType === 'campaign') return 'Кампания';
+  if (gameType === 'module') return 'Модуль';
+  return 'Ваншот';
 }
 
 function useLiveGames() {
@@ -620,6 +647,8 @@ type CalendarView = 'month' | 'week';
 
 function CalendarPage({ initialView = 'month' }: { initialView?: CalendarView }) {
   const { events, games: upcomingGames, isLoading, isError, refetch } = useLiveGames();
+  const catalogQuery = useCatalog();
+  const catalogItems = catalogQuery.data?.items ?? [];
   const today = todayInMoscow();
   const [view, setView] = useState<CalendarView>(initialView);
   const [monthStart, setMonthStart] = useState(() => startOfMonth(today));
@@ -627,6 +656,23 @@ function CalendarPage({ initialView = 'month' }: { initialView?: CalendarView })
   const [formatFilter, setFormatFilter] = useState('all');
   const [storyFilter, setStoryFilter] = useState('all');
   const [beginnersOnly, setBeginnersOnly] = useState(false);
+  const [detailsGame, setDetailsGame] = useState<Game | null>(null);
+  const [overflowDay, setOverflowDay] = useState<{ date: string; games: Game[] } | null>(null);
+  useEffect(() => {
+    if (!detailsGame && !overflowDay) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setDetailsGame(null);
+      setOverflowDay(null);
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [detailsGame, overflowDay]);
   const filterGames = (games: Game[]) => games.filter((game) => {
     const normalizedFormat = game.format.toLowerCase();
     const experience = game.experience.toLowerCase();
@@ -657,6 +703,10 @@ function CalendarPage({ initialView = 'month' }: { initialView?: CalendarView })
   }), [weekGames, weekStart]);
   const monthScheduledCount = monthGames.filter((game) => game.dateISO.slice(0, 7) === monthStart.slice(0, 7) && !calendarOnlyStatuses.has(game.status)).length;
   const scheduledCount = view === 'month' ? monthScheduledCount : weekGames.filter((game) => !calendarOnlyStatuses.has(game.status)).length;
+  const detailsCatalogItem = detailsGame
+    ? catalogItems.find((item) => item.id === detailsGame.catalogItemId)
+      ?? catalogItems.find((item) => item.title.trim().toLocaleLowerCase('ru-RU') === detailsGame.title.trim().toLocaleLowerCase('ru-RU'))
+    : undefined;
 
   function moveMonth(offset: number) {
     setMonthStart((current) => { const date = parseDateKey(current); date.setUTCMonth(date.getUTCMonth() + offset); return startOfMonth(dateKeyFromDate(date)); });
@@ -666,7 +716,7 @@ function CalendarPage({ initialView = 'month' }: { initialView?: CalendarView })
 
   return (
     <Shell>
-      <main className="subpage calendar-page">
+      <main className={`subpage calendar-page${view === 'week' ? ' is-week-view' : ''}`}>
         <div className="calendar-hero reveal">
           <div className="eyebrow">единый календарь игр</div>
           <h1>{view === 'month' ? <>Весь месяц<br /><em>перед глазами</em></> : <>Неделя<br /><em>перед глазами</em></>}</h1>
@@ -687,40 +737,101 @@ function CalendarPage({ initialView = 'month' }: { initialView?: CalendarView })
           {view === 'month' ? <section className="calendar-week" aria-labelledby="calendar-month-title">
             <div className="calendar-week-toolbar"><div><h2 id="calendar-month-title">{monthLabel(monthStart)}</h2><p>Время московское · открытые наборы и ближайшие встречи</p></div><div className="calendar-week-nav" aria-label="Навигация по месяцам"><button type="button" onClick={() => moveMonth(-1)} aria-label="Предыдущий месяц">←</button><button type="button" className="calendar-week-current" onClick={showToday}>Сегодня</button><button type="button" onClick={() => moveMonth(1)} aria-label="Следующий месяц">→</button></div></div>
             <div className="calendar-week-meta"><span>{monthLabel(monthStart)}</span><strong>В расписании: {scheduledCount}</strong></div>
-            <div className="calendar-month-scroll" role="grid" aria-label={`Календарь на ${monthLabel(monthStart)}`}><div className="calendar-month-weekdays" aria-hidden="true">{weekDayLabels.map((label) => <span key={label}>{label}</span>)}</div><div className="calendar-month-grid">{monthGrid.map((day) => <section className={`calendar-month-day${day.date === today ? ' is-today' : ''}${day.date < today ? ' is-past' : ''}${day.date.slice(0, 7) !== monthStart.slice(0, 7) ? ' is-other-month' : ''}`} role="gridcell" aria-label={formatDate(day.date)} key={day.date}><header><span>{parseDateKey(day.date).getUTCDate()}</span></header><div>{day.games.slice(0, 3).map((game) => <MonthGame game={game} key={game.id} />)}{day.games.length > 3 && <span className="calendar-month-more">+{day.games.length - 3} ещё</span>}</div></section>)}</div></div>
+            <div className="calendar-month-scroll" role="grid" aria-label={`Календарь на ${monthLabel(monthStart)}`}><div className="calendar-month-weekdays" aria-hidden="true">{weekDayLabels.map((label) => <span key={label}>{label}</span>)}</div><div className="calendar-month-grid">{monthGrid.map((day) => <section className={`calendar-month-day${day.date === today ? ' is-today' : ''}${day.date < today ? ' is-past' : ''}${day.date.slice(0, 7) !== monthStart.slice(0, 7) ? ' is-other-month' : ''}${day.games.some((game) => game.status === 'day_off') ? ' has-day-off' : ''}`} role="gridcell" aria-label={formatDate(day.date)} key={day.date}><header><span>{parseDateKey(day.date).getUTCDate()}</span></header><div>{day.games.slice(0, 3).map((game) => <MonthGame game={game} key={game.id} onSelect={setDetailsGame} />)}{day.games.length > 3 && <button type="button" className="calendar-month-more" onClick={() => setOverflowDay({ date: day.date, games: day.games.slice(3) })}>+{day.games.length - 3} ещё</button>}</div></section>)}</div></div>
           </section> : <section className="calendar-week" aria-labelledby="calendar-week-title">
             <div className="calendar-week-toolbar"><div><h2 id="calendar-week-title">Расписание на неделю</h2><p>Время московское · открытые наборы и ближайшие встречи</p></div><div className="calendar-week-nav" aria-label="Навигация по неделям"><button type="button" onClick={() => moveWeek(-1)} aria-label="Предыдущая неделя">←</button><button type="button" className="calendar-week-current" onClick={showToday}>Эта неделя</button><button type="button" onClick={() => moveWeek(1)} aria-label="Следующая неделя">→</button></div></div>
             <div className="calendar-week-meta"><span>{formatWeekRange(weekStart)}</span><strong>В расписании: {scheduledCount}</strong></div>
-            <div className="calendar-week-grid-scroll"><div className="calendar-week-grid">{weekDays.map((day) => <section className={`calendar-day${day.date === today ? ' is-today' : ''}${day.date < today ? ' is-past' : ''}`} key={day.date} aria-labelledby={`calendar-day-${day.date}`}><header className="calendar-day-head"><div><span>{day.label}</span><strong>{parseDateKey(day.date).getUTCDate()}</strong></div><small id={`calendar-day-${day.date}`}>{day.name}</small></header><div className="calendar-day-body">{day.games.length ? day.games.map((game) => <WeeklyGame game={game} key={game.id} />) : <p className="calendar-day-empty">Свободный день</p>}</div></section>)}</div></div>
+            <div className="calendar-week-grid-scroll"><div className="calendar-week-grid">{weekDays.map((day) => <section className={`calendar-day${day.date === today ? ' is-today' : ''}${day.date < today ? ' is-past' : ''}${day.games.some((game) => game.status === 'day_off') ? ' has-day-off' : ''}`} key={day.date} aria-labelledby={`calendar-day-${day.date}`}><header className="calendar-day-head"><div><span>{day.label}</span><strong>{parseDateKey(day.date).getUTCDate()}</strong></div><small id={`calendar-day-${day.date}`}>{day.name}</small></header><div className="calendar-day-body">{day.games.length ? day.games.map((game) => <WeeklyGame game={game} key={game.id} onSelect={setDetailsGame} />) : <p className="calendar-day-empty">Свободный день</p>}</div></section>)}</div></div>
           </section>}
         </>}
         {!isLoading && !isError && <section className="calendar-actions-bottom" aria-label="Действия с расписанием" data-testid="calendar-bottom-actions"><div><span className="catalog-kicker">СЛЕДУЮЩИЙ ШАГ</span><h2>Нашли свой слот?</h2><p>Запишитесь на открытую игру или добавьте новую встречу в мастерском календаре.</p></div><div className="calendar-actions-buttons"><Link href="/anketa" className="button button-primary">Записаться на игру <ArrowUpRight size={15} /></Link><Link href="/master/calendar" className="button button-ghost">Добавить игру <ArrowUpRight size={15} /></Link></div></section>}
       </main>
+      {detailsGame && createPortal(<GameDetailsDialog game={detailsGame} catalogItem={detailsCatalogItem} onClose={() => setDetailsGame(null)} />, document.body)}
+      {overflowDay && createPortal(<CalendarMonthOverflowDialog date={overflowDay.date} games={overflowDay.games} onSelect={(game) => { setOverflowDay(null); setDetailsGame(game); }} onClose={() => setOverflowDay(null)} />, document.body)}
     </Shell>
   );
 }
 
-function MonthGame({ game }: { game: Game }) {
+function MonthGame({ game, onSelect }: { game: Game; onSelect: (game: Game) => void }) {
   const isPast = game.dateISO < todayInMoscow();
-  const interactive = !isPast && (canApply(game) || game.status === 'open_slot');
   const className = `calendar-month-event calendar-event-${game.status}${isPast ? ' is-past' : ''}`;
-  const content = <><time>{game.time === '—' ? '' : game.time}</time><span>{game.title}</span></>;
-  return interactive ? <Link href={game.status === 'open_slot' ? '/anketa' : `/anketa?event=${encodeURIComponent(game.eventId)}&date=${encodeURIComponent(game.dateISO)}`} className={className} title={`${game.title} · ${game.time}`}>{content}</Link> : <article className={className} title={`${game.title} · ${game.time}`}>{content}</article>;
+  return <button type="button" className={className} title={game.title + ' · ' + game.time} aria-label={game.title + ', ' + game.time} onClick={() => onSelect(game)}>
+    <time>{game.time === '—' ? '' : game.time}</time><span>{game.title}</span>
+  </button>;
 }
 
-function WeeklyGame({ game }: { game: Game }) {
+function CalendarMonthOverflowDialog({ date, games, onSelect, onClose }: { date: string; games: Game[]; onSelect: (game: Game) => void; onClose: () => void }) {
+  return <div className="calendar-detail-backdrop calendar-more-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="calendar-more-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-more-title">
+      <header><div><span className="catalog-kicker">другие события</span><h2 id="calendar-more-title">{formatDate(date)}</h2></div><button type="button" className="calendar-detail-close" onClick={onClose} aria-label="Закрыть"><X size={18} /></button></header>
+      <div className="calendar-more-list">{games.map((game) => <button type="button" key={game.id} onClick={() => onSelect(game)}><time>{game.time}</time><span><strong>{game.title}</strong><small>{gameTypeLabel(game.gameType)} · {availabilityLabel(game)}</small></span><ArrowUpRight size={15} /></button>)}</div>
+    </section>
+  </div>;
+}
+
+function WeeklyGame({ game, onSelect }: { game: Game; onSelect: (game: Game) => void }) {
   const isPast = game.dateISO < todayInMoscow();
   const details = game.status === 'day_off' ? null : `${game.place}${game.system ? ` · ${game.system}` : ''}`;
   return (
     <article className={`calendar-event calendar-event-${game.status}${isPast ? ' is-past' : ''}`} data-testid={`card-calendar-${game.id}`}>
-      <div className="calendar-event-top"><time>{game.time}</time><span>{availabilityLabel(game)}</span></div>
-      <h3>{game.title}</h3>
-      {details && <p>{details}</p>}
-      {game.price && game.status !== 'day_off' && <small>{game.price}</small>}
+      <button type="button" className="calendar-event-open" onClick={() => onSelect(game)} aria-label={game.title + ', ' + game.time + ', подробности'}>
+        <span className="calendar-event-top"><time>{game.time}</time><span>{availabilityLabel(game)}</span></span>
+        <span className="calendar-event-title">{game.title}</span>
+        {details && <span className="calendar-event-place">{details}</span>}
+        {game.price && game.status !== 'day_off' && <span className="calendar-event-price">{game.price}</span>}
+      </button>
       {canApply(game) && !isPast && <Link href={`/anketa?event=${encodeURIComponent(game.eventId)}&date=${encodeURIComponent(game.dateISO)}`} className="calendar-event-action">{game.status === 'waiting' ? 'Лист ожидания' : 'Оставить заявку'} <ArrowUpRight size={13} /></Link>}
       {game.status === 'open_slot' && !isPast && <Link href="/anketa" className="calendar-event-action">Обсудить игру <ArrowUpRight size={13} /></Link>}
     </article>
   );
+}
+
+function GameDetailsDialog({ game, catalogItem, onClose }: { game: Game; catalogItem?: CatalogItem; onClose: () => void }) {
+  const eventDescription = game.description.startsWith('Подробности игры обсудим') ? '' : game.description;
+  const catalogDescription = catalogItem?.description.trim() ?? '';
+  const showEventDescription = eventDescription && eventDescription.trim() !== catalogDescription;
+  const facts: [string, string][] = [
+    ['Тип', gameTypeLabel(game.gameType)],
+    ['Статус', gameStatusLabel(game)],
+    ['Дата', formatDate(game.dateISO)],
+    ['Время', game.time === '—' ? 'Не указано' : game.time],
+    ['Система', game.system],
+    ['Формат', catalogItem ? catalogFormatLabel(catalogItem.format) : game.format ? catalogFormatLabel(game.format) : ''],
+    ['Место', game.place],
+    ['Цена', catalogItem?.price || game.price],
+    ['Возраст', catalogItem?.age || game.age],
+    ['Опыт', game.experience],
+    ['Места', formatSpots(game.seats)],
+    ['Длительность', game.duration],
+  ];
+  const isPast = game.dateISO < todayInMoscow();
+  const applicationUrl = game.status === 'open_slot'
+    ? '/anketa'
+    : '/anketa?event=' + encodeURIComponent(game.eventId) + '&date=' + encodeURIComponent(game.dateISO);
+
+  return <div className="calendar-detail-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="calendar-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-detail-title">
+      <div className="calendar-detail-cover">
+        <img src={catalogItem?.imageUrl || game.image} alt={catalogItem ? 'Обложка игры «' + catalogItem.title + '»' : 'Иллюстрация игры «' + game.title + '»'} />
+        <button type="button" className="calendar-detail-close" onClick={onClose} aria-label="Закрыть"><X size={18} /></button>
+        <span>{gameTypeLabel(game.gameType)} · {availabilityLabel(game)}</span>
+      </div>
+      <div className="calendar-detail-body">
+        <span className="catalog-kicker">{catalogItem ? catalogSystem(catalogItem.systemKey).title : game.system}</span>
+        <h2 id="calendar-detail-title">{game.title}</h2>
+        {catalogDescription && <div className="calendar-detail-description"><h3>История</h3><p>{catalogDescription}</p></div>}
+        {showEventDescription && <div className="calendar-detail-description"><h3>{catalogDescription ? 'Об этой встрече' : 'Описание'}</h3><p>{eventDescription}</p></div>}
+        <dl className="calendar-detail-facts">{facts.filter(([, value]) => Boolean(value)).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+        {game.playerPrep && <div className="calendar-detail-description"><h3>Подготовка игроков</h3><p>{game.playerPrep}</p></div>}
+        {catalogItem?.status && <p className="calendar-detail-note">{catalogItem.status}</p>}
+        <div className="calendar-detail-actions">
+          {canApply(game) && !isPast && <Link href={applicationUrl} className="button button-primary">Оставить заявку <ArrowUpRight size={15} /></Link>}
+          {game.status === 'open_slot' && !isPast && <Link href={applicationUrl} className="button button-primary">Обсудить игру <ArrowUpRight size={15} /></Link>}
+          <button type="button" className="button button-ghost" onClick={onClose}>Закрыть</button>
+        </div>
+      </div>
+    </section>
+  </div>;
 }
 
 function GamesPage() {
@@ -1026,6 +1137,7 @@ function Router() {
   const [location] = useLocation();
   const search = useSearch();
   if (location === '/master' || location === '/master/' || location.startsWith('/master/')) return <MasterRoutes />;
+  if (location === '/mini' || location === '/mini/') return <MiniApp />;
   return <ErrorBoundary resetKey={`${location}?${search}`}><Seo /><RouteTransition><Switch><Route path="/" component={Home} /><Route path="/calendar/week" component={() => <CalendarPage initialView="week" />} /><Route path="/calendar" component={() => <CalendarPage initialView="month" />} /><Route path="/anketa" component={ApplicationPage} /><Route path="/games" component={GamesPage} /><Route component={NotFound} /></Switch></RouteTransition></ErrorBoundary>;
 }
 

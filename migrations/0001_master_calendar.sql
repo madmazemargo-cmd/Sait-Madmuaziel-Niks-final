@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS calendar_events (
   title TEXT NOT NULL DEFAULT '',
   event_date TEXT NOT NULL,
   start_time TEXT NOT NULL DEFAULT '',
+  game_type TEXT NOT NULL DEFAULT 'oneshot',
   status TEXT NOT NULL DEFAULT 'available',
   seats INTEGER,
   description TEXT NOT NULL DEFAULT '',

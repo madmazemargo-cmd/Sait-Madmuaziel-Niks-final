@@ -5,7 +5,7 @@ const router: IRouter = Router();
 
 const calendarSourceUrl =
   process.env.CALENDAR_SOURCE_URL ??
-  "https://dndmaster.dndmaster.workers.dev/api/calendar";
+  "https://madmuazelle-niks-api.dndmaster.workers.dev/api/calendar";
 const sourceTimeoutMs = 8_000;
 
 router.get("/calendar", async (_req, res): Promise<void> => {
