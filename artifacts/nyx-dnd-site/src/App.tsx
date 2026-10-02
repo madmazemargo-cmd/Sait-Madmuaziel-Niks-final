@@ -340,6 +340,14 @@ function Shell({ children }: { children: ReactNode }) {
             <Link href="/privacy">Политика данных</Link>
             <Link href="/terms">Условия</Link>
             <Link href="/offer">Оферта</Link>
+            <Link href="/reviews">Оставить отзыв</Link>
+            <Link href="/novichkam">Новичкам</Link>
+            <Link href="/dnd">D&amp;D</Link>
+            <Link href="/vampire">Vampire</Link>
+            <Link href="/daggerheart">Daggerheart</Link>
+            <Link href="/cyberpunk">Cyberpunk</Link>
+            <Link href="/online">Онлайн</Link>
+            <Link href="/offline">Очно в Москве</Link>
             <a className="footer-icons-credit" href="https://www.flaticon.com/uicons" target="_blank" rel="noreferrer">Иконки: Flaticon UIcons</a>
           </div>
         </footer>
@@ -557,6 +565,152 @@ function CatalogBrowser({ selectedSystem }: { selectedSystem?: string }) {
   );
 }
 
+type LandingPageConfig = {
+  slug: string;
+  path: string;
+  eyebrow: string;
+  title: string;
+  lead: string;
+  description: string;
+  system?: string;
+  format?: 'online' | 'offline';
+  image: string;
+  points: Array<{ title: string; text: string }>;
+  faq: Array<{ question: string; answer: string }>;
+  offer: string;
+};
+
+const landingPages: Record<string, LandingPageConfig> = {
+  dnd: {
+    slug: 'dnd', path: '/dnd', eyebrow: 'D&D 5e · москва / онлайн', title: 'D&D, в котором хочется остаться',
+    lead: 'Камерные ваншоты и кампании по Dungeons & Dragons 5e: живые персонажи, понятные правила и решения, которые меняют историю.',
+    description: 'Авторские игры Dungeons & Dragons 5e с ведущей Мадмуазель Никс. Онлайн и очно в Москве, для новичков и опытных игроков.', system: 'dnd', image: '/assets/system-dnd.webp',
+    points: [{ title: 'Фэнтези с характером', text: 'Не готовый аттракцион, а история, собранная вокруг вашей группы и её выбора.' }, { title: 'Можно с нуля', text: 'Помогу собрать персонажа, объясню механику и дам спокойный вход в первую сцену.' }, { title: 'Ваншот или кампания', text: 'Одна встреча для знакомства с миром или регулярная история с продолжением.' }],
+    faq: [{ question: 'Нужен ли свой персонаж?', answer: 'Нет. Можно прийти с идеей или выбрать готовую основу вместе перед игрой.' }, { question: 'Какой нужен опыт?', answer: 'Любой. Перед началом я объясню правила и пришлю короткую памятку.' }], offer: 'Участие в авторской игре Dungeons & Dragons 5e',
+  },
+  vampires: {
+    slug: 'vampires', path: '/vampire', eyebrow: 'Vampire: The Masquerade · 18+', title: 'Ночь принадлежит тем, кто умеет молчать',
+    lead: 'Готические истории о власти, долге и голоде. В «Вампирах: Маскараде» важнее не бросок, а то, чем вы готовы за него заплатить.',
+    description: 'Вампиры: Маскарад в Москве и онлайн: камерные хроники, моральные выборы и безопасный стол для драматической игры.', system: 'vampires', image: '/assets/system-vampires.webp',
+    points: [{ title: 'Хроника, а не бой', text: 'Интриги, отношения и цена бессмертия в центре каждой сцены.' }, { title: 'Безопасная драма', text: 'Перед игрой обсуждаем Lines & Veils, границы и способы остановить сцену.' }, { title: 'Готовый вход', text: 'Не нужно читать лор на ночь: дам контекст, архетип и личный крючок.' }],
+    faq: [{ question: 'Это только для опытных?', answer: 'Нет. Новичкам дам вводную по сеттингу и помогу выбрать клан и мотивацию.' }, { question: 'Будет ли страшно?', answer: 'Тон обсуждаем заранее. Можно настроить хоррор, драму или больше социального напряжения.' }], offer: 'Участие в хронике Vampire: The Masquerade',
+  },
+  daggerheart: {
+    slug: 'daggerheart', path: '/daggerheart', eyebrow: 'Daggerheart · героическое фэнтези', title: 'Daggerheart: риск, который ведёт вперёд',
+    lead: 'Система для тех, кто хочет бросать кубики сердцем: быстрые сцены, яркие герои и мир, который отвечает на смелые решения.',
+    description: 'Авторские игры Daggerheart для героического фэнтези. Онлайн и очно в Москве, с мягким входом для новых игроков.', system: 'daggerheart', image: '/assets/system-daggerheart.webp',
+    points: [{ title: 'Герои в центре', text: 'Собираем персонажа из желания, связи и риска, а не из таблицы бонусов.' }, { title: 'Темп без пауз', text: 'Правила поддерживают сцену и помогают быстро перейти к следующему решению.' }, { title: 'История вместе', text: 'У каждого игрока есть право добавить деталь в мир и изменить направление партии.' }],
+    faq: [{ question: 'Нужно ли знать D&D?', answer: 'Нет. Daggerheart объясню отдельно, а сходства с D&D разберём по ходу.' }, { question: 'Это кампании?', answer: 'В календаре бывают и короткие знакомства, и серии встреч.' }], offer: 'Участие в авторской игре Daggerheart',
+  },
+  cyberpunk: {
+    slug: 'cyberpunk', path: '/cyberpunk', eyebrow: 'Cyberpunk 2020 · неон / риск', title: 'Неон гаснет. Долги остаются.',
+    lead: 'Cyberpunk 2020 про улицы, корпорации и команду, которая пытается сохранить себя в городе, где всё имеет цену.',
+    description: 'Авторские игры Cyberpunk 2020 в Москве и онлайн: грязный неон, быстрые решения и персонажи, которым есть что терять.', system: 'cyberpunk', image: '/assets/system-cyberpunk.webp',
+    points: [{ title: 'Миссия с последствиями', text: 'Каждая работа меняет отношения, репутацию и следующий шаг команды.' }, { title: 'Грязный неон', text: 'Корпорации, улицы, импланты и личные истории без безопасных ответов.' }, { title: 'Для новичков тоже', text: 'Дам готовый архетип или помогу собрать своего на первой встрече.' }],
+    faq: [{ question: 'Нужна ли система Cyberpunk 2020?', answer: 'Нет. Перед игрой пришлю короткую памятку и проведу через первый бросок.' }, { question: 'Можно играть онлайн?', answer: 'Да, доступные форматы и ближайшие даты указаны в расписании.' }], offer: 'Участие в авторской игре Cyberpunk 2020',
+  },
+  beginners: {
+    slug: 'beginners', path: '/novichkam', eyebrow: 'первый стол · без экзамена', title: 'Первый бросок — без стресса',
+    lead: 'Не нужно знать правила, иметь костюмы или приходить компанией. Я объясню игру, помогу с персонажем и бережно введу в историю.',
+    description: 'Настольные ролевые игры для новичков в Москве и онлайн: понятный старт, небольшие группы и ведущая рядом.', image: '/assets/table.jpg',
+    points: [{ title: 'Объясню правила', text: 'Короткая вводная перед игрой и подсказки по ходу, без проверки домашнего задания.' }, { title: 'Соберу комфортную группу', text: 'Перед подтверждением знакомлю игроков и сверяю ожидания по тону и темпу.' }, { title: 'Можно прийти одному', text: 'Открытые столы рассчитаны на знакомство, а компанию можно собрать под запрос.' }],
+    faq: [{ question: 'А если я стесняюсь?', answer: 'Это нормально. Можно говорить мало, наблюдать и включаться в сцену тогда, когда готово.' }, { question: 'Что взять с собой?', answer: 'Только себя. Материалы, ссылки и инструкции пришлю до встречи.' }], offer: 'Первый стол настольной ролевой игры для новичков',
+  },
+  online: {
+    slug: 'online', path: '/online', eyebrow: 'онлайн · любой экран', title: 'Игра, для которой не нужен один город',
+    lead: 'Подключайтесь из дома: подготовленные материалы, понятные ссылки и тот же живой стол, только через экран.',
+    description: 'Онлайн-настольные ролевые игры Мадмуазель Никс: D&D, Vampire, Daggerheart и Cyberpunk для игроков из любого города.', format: 'online', image: '/assets/table.jpg',
+    points: [{ title: 'Подключение за 10 минут', text: 'После подтверждения пришлю ссылку, памятку и всё, что понадобится для старта.' }, { title: 'Камера по желанию', text: 'Важнее голос, внимание и желание быть в истории — формат подстроим под группу.' }, { title: 'Москва и другие часовые пояса', text: 'Сверяем время заранее и фиксируем его в приглашении по Москве.' }],
+    faq: [{ question: 'Какие сервисы нужны?', answer: 'Подробности зависят от игры. Ссылки и инструкции приходят после подтверждения.' }, { question: 'Можно ли играть с телефона?', answer: 'Лучше компьютер с гарнитурой, но для коротких встреч подойдёт и планшет.' }], offer: 'Онлайн-участие в настольной ролевой игре',
+  },
+  offline: {
+    slug: 'offline', path: '/offline', eyebrow: 'очно · москва', title: 'За одним столом всё звучит иначе',
+    lead: 'Карты, миниатюры, живые паузы и общая энергия комнаты. Офлайн-игры проходят в уютных местах в центре Москвы.',
+    description: 'Очные настольные ролевые игры Мадмуазель Никс в Москве: камерные группы, авторские материалы и безопасная атмосфера.', format: 'offline', image: '/assets/table.jpg',
+    points: [{ title: 'Центр Москвы', text: 'Точный адрес и время отправляю после подтверждения состава группы.' }, { title: 'Материалы уже на столе', text: 'Карты, жетоны и печатные материалы входят в подготовку игры.' }, { title: 'Комфортная группа', text: 'Сверяем ожидания и границы заранее, чтобы за столом можно было играть свободно.' }],
+    faq: [{ question: 'Где именно проходят игры?', answer: 'Обычно в антикафе рядом с Бауманской или Курской. Точный адрес зависит от даты.' }, { question: 'Есть ли возрастные ограничения?', answer: 'Для каждой игры указаны свои условия. Напишите в анкете, если хотите уточнить.' }], offer: 'Очное участие в настольной ролевой игре в Москве',
+  },
+};
+
+const homeFaq = [
+  { question: 'Можно, если я никогда не играла?', answer: 'Да. Большинство групп открыты для новичков. Я объясню базовые правила до начала и буду рядом, когда появится первый вопрос.' },
+  { question: 'Сколько длится игра?', answer: 'Обычно 4–5 часов с коротким перерывом. Перед каждой встречей я заранее обозначу точное время окончания.' },
+  { question: 'Что входит в цену?', answer: 'Подготовка сюжета и материалов, ведение игры, музыка, карты и пост-игровое резюме. Для онлайна — все нужные ссылки.' },
+  { question: 'А если я не смогу прийти?', answer: 'Предупреди минимум за 48 часов — перенесём запись или вернём оплату. При срочной ситуации сначала поговорим.' },
+  { question: 'Где проходят офлайн-игры?', answer: 'В уютных антикафе в центре Москвы, обычно рядом с метро Бауманская или Курская. Точный адрес приходит после подтверждения группы.' },
+  { question: 'Можно придумать свою кампанию?', answer: 'Конечно. В анкете есть поле для идеи — расскажи, какой мир хочется прожить, а я предложу формат и бюджет.' },
+];
+
+function JsonLd({ data }: { data: unknown }) {
+  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }} />;
+}
+
+function eventStartDate(game: Game) {
+  const time = game.time.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+  return time ? `${game.dateISO}T${time[0]}:00+03:00` : `${game.dateISO}T12:00:00+03:00`;
+}
+
+function eventStructuredData(game: Game) {
+  const numericPrice = Number((game.price.match(/[\d\s]+/)?.[0] ?? '').replace(/\s/g, ''));
+  const data: Record<string, unknown> = {
+    '@context': 'https://schema.org', '@type': 'Event', name: game.title, description: game.description,
+    startDate: eventStartDate(game), eventStatus: 'https://schema.org/EventScheduled', eventAttendanceMode: game.format.includes('online') && game.format.includes('offline') ? 'https://schema.org/MixedEventAttendanceMode' : game.format.includes('online') ? 'https://schema.org/OnlineEventAttendanceMode' : 'https://schema.org/OfflineEventAttendanceMode',
+    image: new URL(game.image, window.location.origin).href, organizer: { '@type': 'Person', name: 'Мадмуазель Никс', url: window.location.origin },
+    location: game.format.includes('online') && !game.format.includes('offline') ? { '@type': 'VirtualLocation', url: window.location.origin } : { '@type': 'Place', name: game.place || 'Москва' },
+  };
+  if (Number.isFinite(numericPrice) && numericPrice > 0) data.offers = { '@type': 'Offer', price: numericPrice, priceCurrency: 'RUB', availability: game.seats === 0 ? 'https://schema.org/SoldOut' : 'https://schema.org/InStock', url: `${window.location.origin}/anketa?event=${encodeURIComponent(game.eventId)}&date=${encodeURIComponent(game.dateISO)}` };
+  return data;
+}
+
+function NextGameSection({ system, format }: { system?: string; format?: 'online' | 'offline' }) {
+  const { games, isLoading, isError } = useLiveGames();
+  const next = games.find((game) => {
+    if (game.dateISO < todayInMoscow() || calendarOnlyStatuses.has(game.status) || !canApply(game)) return false;
+    if (system && normalizeSystemKey(`${game.system} ${game.title}`) !== system) return false;
+    if (format) {
+      const normalizedFormat = game.format.toLowerCase();
+      const matchesFormat = format === 'online'
+        ? normalizedFormat.includes('online') || normalizedFormat.includes('онлайн')
+        : normalizedFormat.includes('offline') || normalizedFormat.includes('очно') || normalizedFormat.includes('офлайн');
+      if (!matchesFormat) return false;
+    }
+    return true;
+  });
+  return <section className="next-game-section" aria-labelledby="next-game-title">
+    <div className="next-game-copy"><span className="catalog-kicker">БЛИЖАЙШИЙ СТОЛ</span><h2 id="next-game-title">Следующая история уже ищет игроков</h2><p>{isError ? 'Календарь временно недоступен. Оставьте заявку — я пришлю ближайшие варианты.' : 'Свободные места обновляются из календаря. Можно присоединиться к открытому столу или попросить подобрать дату.'}</p><Link href="/calendar" className="button button-ghost">Открыть календарь <ArrowUpRight size={15} /></Link></div>
+    <div className="next-game-card" aria-live="polite">
+      {isLoading && <span className="next-game-state">Проверяю ближайшие даты…</span>}
+      {!isLoading && next && <><div className="next-game-date"><strong>{next.dateISO.slice(8)}</strong><span>{formatDayName(next.dateISO)}</span></div><div className="next-game-info"><span>{next.time} · {next.place}</span><h3>{next.title}</h3><p>{next.system || 'Авторская игра'} · {next.price || 'Цена уточняется'}</p></div><div className="next-game-spots"><strong>{formatSpots(next.seats)}</strong><Link href={`/anketa?event=${encodeURIComponent(next.eventId)}&date=${encodeURIComponent(next.dateISO)}`} aria-label={`Оставить заявку на игру ${next.title}`}>Записаться <ArrowUpRight size={14} /></Link></div><JsonLd data={eventStructuredData(next)} /></>}
+      {!isLoading && !next && <span className="next-game-state">Подходящих открытых столов пока нет. <Link href="/anketa">Соберём группу под запрос</Link>.</span>}
+    </div>
+  </section>;
+}
+
+type Review = { id: string; name: string; review: string; game: string; rating: number | null; createdAt: string };
+
+function usePublishedReviews() {
+  return useQuery({ queryKey: ['/api/reviews'], queryFn: async () => { const response = await fetch('/api/reviews', { cache: 'no-store', headers: { Accept: 'application/json' } }); if (!response.ok) throw new Error('Отзывы временно недоступны.'); return response.json() as Promise<{ reviews: Review[] }>; }, staleTime: 60_000 });
+}
+
+function ReviewsSection() {
+  const { data, isLoading } = usePublishedReviews();
+  const reviews = data?.reviews ?? [];
+  return <section className="trust-section reviews-section" data-testid="testimonial-section"><div className="section-kicker">отзывы с разрешением на публикацию</div><h2>{reviews.length ? <>Истории,<br />которые уже случились</> : <>Пусть твоя история<br />станет следующей</>}</h2>{isLoading && <p className="reviews-empty">Загружаю отзывы игроков…</p>}{!isLoading && reviews.length > 0 && <div className="reviews-grid">{reviews.slice(0, 3).map((review) => <article className="review-card" key={review.id}><p>«{review.review}»</p><footer>— {review.name}{review.game ? ` · ${review.game}` : ''}</footer></article>)}</div>}{!isLoading && !reviews.length && <div className="reviews-empty"><p>Я собираю первые отзывы с отдельным согласием на публикацию. Расскажите, что запомнилось после игры — это помогает новым игрокам решиться.</p><Link className="button button-ghost" href="/reviews">Оставить отзыв <ArrowUpRight size={15} /></Link></div>}</section>;
+}
+
+function LandingPage({ page }: { page: LandingPageConfig }) {
+  const faqSchema = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: page.faq.map((item) => ({ '@type': 'Question', name: item.question, acceptedAnswer: { '@type': 'Answer', text: item.answer } })) };
+  const offerSchema = { '@context': 'https://schema.org', '@type': 'Offer', name: page.offer, description: page.description, url: new URL(page.path, window.location.origin).href, seller: { '@type': 'Person', name: 'Мадмуазель Никс' }, areaServed: page.format === 'offline' ? 'Москва' : 'Россия' };
+  return <Shell><main className="subpage landing-page"><JsonLd data={faqSchema} /><JsonLd data={offerSchema} /><section className="landing-hero"><div className="landing-hero-copy"><div className="eyebrow">{page.eyebrow}</div><h1>{page.title}</h1><p className="subpage-lead">{page.lead}</p><div className="hero-actions"><Link href="/calendar" className="button button-primary">Посмотреть свободные места <ArrowUpRight size={15} /></Link><Link href="/anketa" className="button button-ghost">Подобрать формат</Link></div></div><img src={page.image} alt="" className="landing-hero-image" loading="eager" decoding="async" /></section><section className="landing-points" aria-label="Особенности формата">{page.points.map((point, index) => <article key={point.title}><span>{String(index + 1).padStart(2, '0')}</span><h2>{point.title}</h2><p>{point.text}</p></article>)}</section><NextGameSection system={page.system} format={page.format} />{page.system && <CatalogBrowser selectedSystem={page.system} />}<section className="section landing-faq" aria-labelledby="landing-faq-title"><div className="section-head"><div><div className="section-kicker">вопросы перед входом</div><h2 id="landing-faq-title">Коротко<br />о главном</h2></div><p className="section-intro">Если ответа не хватает, напишите в анкете — я отвечу лично и помогу выбрать первую игру.</p></div><div className="faq-grid">{page.faq.map((item) => <Faq key={item.question} question={item.question} answer={item.answer} />)}</div></section><section className="landing-cta"><div><span className="catalog-kicker">СЛЕДУЮЩИЙ ШАГ</span><h2>Готовы войти в историю?</h2><p>Расскажите, что хочется сыграть, и я предложу ближайшую дату, систему и формат.</p></div><Link href="/anketa" className="button button-primary">Заполнить анкету <ArrowUpRight size={15} /></Link></section></main></Shell>;
+}
+
+function ReviewsPage() {
+  const [sent, setSent] = useState(false); const [pending, setPending] = useState(false); const [error, setError] = useState('');
+  const [form, setForm] = useState({ name: '', contact: '', game: '', review: '', rating: '5', consent: false, website: '' });
+  async function submit(event: FormEvent) { event.preventDefault(); setError(''); setPending(true); try { const response = await fetch('/api/reviews', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ ...form, rating: Number(form.rating), publicationConsent: form.consent }) }); const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(typeof payload.error === 'string' ? payload.error : 'Не удалось отправить отзыв.'); setSent(true); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Не удалось отправить отзыв.'); } finally { setPending(false); } }
+  return <Shell><main className="subpage review-page"><div className="subpage-head"><div className="eyebrow">голос игроков</div><h1>Оставить<br /><em>отзыв</em></h1><p className="subpage-lead">Поделитесь впечатлением после игры. Публикуем только отзывы с отдельным явным разрешением и можем указать систему или формат.</p></div>{sent ? <div className="success-card review-success"><div className="section-kicker">спасибо</div><h2>Отзыв отправлен на проверку</h2><p>Я прочитаю его и опубликую только при наличии вашего согласия. Если нужно что-то исправить, напишу в Telegram.</p><div className="hero-actions"><a className="button button-primary" href="https://t.me/mad_maze_elle" target="_blank" rel="noreferrer">Написать мастеру <ArrowUpRight size={15} /></a><Link className="button button-ghost" href="/">На главную</Link></div></div> : <form className="review-form" onSubmit={submit}><div className="field-grid"><div className="field"><label htmlFor="review-name">Имя или ник *</label><input id="review-name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required maxLength={100} /></div><div className="field"><label htmlFor="review-contact">Telegram для связи *</label><input id="review-contact" value={form.contact} onChange={(event) => setForm({ ...form, contact: event.target.value })} required maxLength={120} placeholder="@username" /></div><div className="field"><label htmlFor="review-game">Игра или система</label><input id="review-game" value={form.game} onChange={(event) => setForm({ ...form, game: event.target.value })} maxLength={200} placeholder="Например, D&D · ваншот" /></div><div className="field"><label htmlFor="review-rating">Оценка</label><select id="review-rating" value={form.rating} onChange={(event) => setForm({ ...form, rating: event.target.value })}><option value="5">5 · очень понравилось</option><option value="4">4 · понравилось</option><option value="3">3 · нормально</option><option value="2">2 · есть вопросы</option><option value="1">1 · не подошло</option></select></div><div className="field full"><label htmlFor="review-text">Ваш отзыв *</label><textarea id="review-text" value={form.review} onChange={(event) => setForm({ ...form, review: event.target.value })} required maxLength={4000} rows={7} placeholder="Что запомнилось, какой момент хочется рассказать?" /></div></div><div className="form-honeypot" aria-hidden="true"><label htmlFor="review-website">Не заполняйте это поле</label><input id="review-website" value={form.website} onChange={(event) => setForm({ ...form, website: event.target.value })} tabIndex={-1} autoComplete="off" /></div><label className="consent"><input type="checkbox" checked={form.consent} onChange={(event) => setForm({ ...form, consent: event.target.checked })} required /><span>Я разрешаю опубликовать этот отзыв на сайте с указанным именем или ником. <Link href="/privacy">Политика данных</Link></span></label>{error && <div className="form-status error" role="alert">{error}</div>}<button className="button button-primary" disabled={pending || !form.consent}>{pending ? 'Отправляю…' : 'Отправить отзыв'} <ArrowUpRight size={15} /></button></form>}</main></Shell>;
+}
+
 function Home() {
   return (
     <Shell>
@@ -590,6 +744,8 @@ function Home() {
           <div className="signal"><ArrowUpRight className="signal-icon" size={17} aria-hidden="true" /><span><strong>Москва</strong><br />и любой экран</span></div>
         </div>
 
+        <NextGameSection />
+
         <CatalogSection id="games" />
 
         <section className="section" id="about" data-testid="about-section">
@@ -615,29 +771,11 @@ function Home() {
           </div>
         </section>
 
-        <section className="trust-section" data-testid="testimonial-section">
-          <div className="section-kicker">из дневника партии</div>
-          <h2>«Я пришла одна,<br />а ушла с историей»</h2>
-          <div className="trust-grid">
-            <div><p className="quote">«Никс умеет дать сцене воздух. Здесь не нужно быть самым громким за столом, чтобы твой выбор что-то изменил.»</p><div className="quote-author">— Маша, игрок с 2022 года</div></div>
-            <div className="trust-list">
-              <div className="trust-item"><b>01</b><span>Никаких случайных незнакомцев: перед игрой я знакомлю группу и собираю ожидания.</span></div>
-              <div className="trust-item"><b>02</b><span>Безопасность важнее драматургии. У каждой игры есть Lines & Veils и X-card.</span></div>
-              <div className="trust-item"><b>03</b><span>Цена известна заранее: в неё уже входят подготовка, материалы и моё время.</span></div>
-            </div>
-          </div>
-        </section>
+        <ReviewsSection />
 
         <section className="section" id="faq" data-testid="faq-section">
           <div className="section-head"><div><div className="section-kicker">вопросы перед входом</div><h2>Спросить<br />не стыдно</h2></div><p className="section-intro">Собрала то, о чём обычно спрашивают в первом сообщении. Если твоего вопроса здесь нет — напиши мне в анкете.</p></div>
-          <div className="faq-grid">
-            <Faq question="Можно, если я никогда не играла?" answer="Да. Большинство групп открыты для новичков. Я объясню базовые правила до начала и буду рядом, когда появится первый вопрос." />
-            <Faq question="Сколько длится игра?" answer="Обычно 4–5 часов с коротким перерывом. Перед каждой встречей я заранее обозначаю точное время окончания." />
-            <Faq question="Что входит в цену?" answer="Подготовка сюжета и материалов, ведение игры, музыка, карты и пост-игровое резюме. Для онлайна — все нужные ссылки." />
-            <Faq question="А если я не смогу прийти?" answer="Предупреди минимум за 48 часов — перенесём запись или вернём оплату. При срочной ситуации всегда сначала поговорим." />
-            <Faq question="Где проходят офлайн-игры?" answer="В уютных антикафе в центре Москвы, обычно рядом с метро Бауманская или Курская. Точный адрес приходит после подтверждения группы." />
-            <Faq question="Можно придумать свою кампанию?" answer="Конечно. В анкете есть поле для идеи — расскажи, какой мир хочется прожить, а я предложу формат и бюджет." />
-          </div>
+          <div className="faq-grid">{homeFaq.map((item) => <Faq key={item.question} question={item.question} answer={item.answer} />)}</div>
         </section>
       </main>
     </Shell>
@@ -1088,8 +1226,8 @@ function LegalPage({ kind }: { kind: LegalPageKind }) {
       title: 'Политика обработки данных',
       lead: 'Какие данные нужны для подбора игры и как с ними обращаться.',
       sections: [
-        ['Какие данные мы получаем', 'Имя или ник, Telegram-контакт, количество игроков, пожелания к игре, опыт, расписание и дополнительные ограничения. Обязательны только поля, нужные для обратной связи.'],
-        ['Зачем они нужны', 'Данные используются для связи, подбора формата и организации участия в игре. Мы не продаём анкеты и не используем их для рассылок без отдельного согласия.'],
+        ['Какие данные мы получаем', 'Из анкеты: имя или ник, Telegram-контакт, количество игроков, пожелания к игре, опыт, расписание и дополнительные ограничения. Из формы отзыва: имя или ник, контакт, текст, оценка, выбранная игра и отдельное разрешение на публикацию. Обязательны только поля, нужные для обратной связи.'],
+        ['Зачем они нужны', 'Данные используются для связи, подбора формата, организации участия и проверки отзыва. Отзыв публикуется только после отдельного явного разрешения; без него он остаётся на модерации или удаляется. Мы не продаём анкеты и не используем их для рассылок без отдельного согласия.'],
         ['Срок хранения и удаление', 'Заявки хранятся столько, сколько нужно для обработки обращения и истории договорённостей. Для исправления или удаления данных напишите в Telegram: @mad_maze_elle.'],
         ['Передача третьим лицам', 'Контакт и содержание заявки могут обрабатываться сервисами, необходимыми для работы сайта и связи с мастером, включая Cloudflare, базу данных и Telegram.'],
         ['Аналитика и источник обращения', 'Если на сайте включена аналитика, агрегированные события посещения обрабатываются Plausible без cookie. При отправке анкеты значения UTM-меток из ссылки сохраняются вместе с заявкой, чтобы понять, откуда пришло обращение.'],
@@ -1117,7 +1255,7 @@ function LegalPage({ kind }: { kind: LegalPageKind }) {
     },
   };
   const page = content[kind];
-  return <Shell><main className="subpage legal-page"><div className="subpage-head reveal"><div className="eyebrow">документы</div><h1>{page.title}</h1><p className="subpage-lead">{page.lead}</p></div><div className="legal-content">{page.sections.map(([heading, text]) => <section key={heading}><h2>{heading}</h2><p>{text}</p></section>)}<p className="legal-updated">Версия документа: 2 октября 2026 года.</p></div></main></Shell>;
+  return <Shell><main className="subpage legal-page"><div className="subpage-head reveal"><div className="eyebrow">документы</div><h1>{page.title}</h1><p className="subpage-lead">{page.lead}</p></div><div className="legal-content">{page.sections.map(([heading, text]) => <section key={heading}><h2>{heading}</h2><p>{text}</p></section>)}<p className="legal-updated">Версия документа: 3 октября 2026 года.</p></div></main></Shell>;
 }
 
 const pageMeta: Record<string, { title: string; description: string }> = {
@@ -1144,6 +1282,14 @@ const pageMeta: Record<string, { title: string; description: string }> = {
   '/privacy': { title: 'Политика обработки данных — Мадмуазель Никс', description: 'Как Мадмуазель Никс использует данные из анкеты игроков.' },
   '/terms': { title: 'Условия участия — Мадмуазель Никс', description: 'Правила записи, оплаты, отмены и безопасного участия в играх.' },
   '/offer': { title: 'Публичная оферта — Мадмуазель Никс', description: 'Условия оказания услуг ведущего настольных ролевых игр.' },
+  '/reviews': { title: 'Отзывы игроков — Мадмуазель Никс', description: 'Оставьте отзыв после игры. Публикуем только отзывы с отдельным разрешением игрока.' },
+  '/dnd': { title: 'D&D 5e в Москве и онлайн — Мадмуазель Никс', description: landingPages.dnd.description },
+  '/vampire': { title: 'Vampire: The Masquerade — Мадмуазель Никс', description: landingPages.vampires.description },
+  '/daggerheart': { title: 'Daggerheart — авторские игры Мадмуазель Никс', description: landingPages.daggerheart.description },
+  '/cyberpunk': { title: 'Cyberpunk 2020 — авторские игры Мадмуазель Никс', description: landingPages.cyberpunk.description },
+  '/novichkam': { title: 'Настольные ролевые игры для новичков — Мадмуазель Никс', description: landingPages.beginners.description },
+  '/online': { title: 'Онлайн-настольные ролевые игры — Мадмуазель Никс', description: landingPages.online.description },
+  '/offline': { title: 'Очные настольные ролевые игры в Москве — Мадмуазель Никс', description: landingPages.offline.description },
 };
 
 function Seo() {
@@ -1167,7 +1313,11 @@ function Seo() {
     document.querySelector('link[rel="canonical"]')?.setAttribute('href', pageUrl);
   }, [location, pathname]);
 
-  return null;
+  const localBusiness = {
+    '@context': 'https://schema.org', '@type': 'LocalBusiness', '@id': `${window.location.origin}/#business`, name: 'Мадмуазель Никс', description: 'Авторские настольные ролевые игры онлайн и очно в Москве.', url: window.location.origin, image: new URL('/og.png', window.location.origin).href, priceRange: '₽₽', areaServed: { '@type': 'City', name: 'Москва' }, address: { '@type': 'PostalAddress', addressLocality: 'Москва', addressCountry: 'RU' }, sameAs: ['https://t.me/mad_maze_elle', 'https://t.me/mad_maze_elle_dnd'], makesOffer: { '@type': 'Offer', name: 'Участие в настольной ролевой игре', url: `${window.location.origin}/calendar` },
+  };
+  const faqSchema = pathname === '/' ? { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: homeFaq.map((item) => ({ '@type': 'Question', name: item.question, acceptedAnswer: { '@type': 'Answer', text: item.answer } })) } : null;
+  return <><JsonLd data={localBusiness} />{faqSchema && <JsonLd data={faqSchema} />}</>;
 }
 
 function RouteTransition({ children }: { children: ReactNode }) {
@@ -1194,7 +1344,7 @@ function Router() {
   const search = useSearch();
   if (location === '/master' || location === '/master/' || location.startsWith('/master/')) return <MasterRoutes />;
   if (location === '/mini' || location === '/mini/') return <MiniApp />;
-  return <ErrorBoundary resetKey={`${location}?${search}`}><Seo /><RouteTransition><Switch><Route path="/" component={Home} /><Route path="/calendar/week" component={() => <CalendarPage initialView="week" />} /><Route path="/calendar" component={() => <CalendarPage initialView="month" />} /><Route path="/anketa" component={ApplicationPage} /><Route path="/games" component={GamesPage} /><Route path="/privacy" component={() => <LegalPage kind="privacy" />} /><Route path="/terms" component={() => <LegalPage kind="terms" />} /><Route path="/offer" component={() => <LegalPage kind="offer" />} /><Route path="/rules" component={() => <LegalPage kind="terms" />} /><Route component={NotFound} /></Switch></RouteTransition></ErrorBoundary>;
+  return <ErrorBoundary resetKey={`${location}?${search}`}><Seo /><RouteTransition><Switch><Route path="/" component={Home} /><Route path="/calendar/week" component={() => <CalendarPage initialView="week" />} /><Route path="/calendar" component={() => <CalendarPage initialView="month" />} /><Route path="/anketa" component={ApplicationPage} /><Route path="/games" component={GamesPage} /><Route path="/reviews" component={ReviewsPage} /><Route path="/dnd" component={() => <LandingPage page={landingPages.dnd} />} /><Route path="/vampire" component={() => <LandingPage page={landingPages.vampires} />} /><Route path="/daggerheart" component={() => <LandingPage page={landingPages.daggerheart} />} /><Route path="/cyberpunk" component={() => <LandingPage page={landingPages.cyberpunk} />} /><Route path="/novichkam" component={() => <LandingPage page={landingPages.beginners} />} /><Route path="/online" component={() => <LandingPage page={landingPages.online} />} /><Route path="/offline" component={() => <LandingPage page={landingPages.offline} />} /><Route path="/privacy" component={() => <LegalPage kind="privacy" />} /><Route path="/terms" component={() => <LegalPage kind="terms" />} /><Route path="/offer" component={() => <LegalPage kind="offer" />} /><Route path="/rules" component={() => <LegalPage kind="terms" />} /><Route component={NotFound} /></Switch></RouteTransition></ErrorBoundary>;
 }
 
 function App() {

@@ -40,6 +40,29 @@ const text = (value: unknown, max = 4000) => typeof value === 'string' ? value.t
 const validDate = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 const nowIso = () => new Date().toISOString();
 const id = () => crypto.randomUUID();
+const crmStatuses = new Set(['new', 'contacted', 'confirmed', 'attended', 'repeat_sale']);
+const reviewStatuses = new Set(['pending', 'published', 'rejected']);
+
+function crmStatus(value: unknown) {
+  const normalized = text(value, 30);
+  return crmStatuses.has(normalized) ? normalized : null;
+}
+
+function reviewStatus(value: unknown) {
+  const normalized = text(value, 30);
+  return reviewStatuses.has(normalized) ? normalized : null;
+}
+
+function toPublicReview(row: Row) {
+  return {
+    id: String(row.id ?? ''),
+    name: String(row.name ?? ''),
+    review: String(row.review_text ?? ''),
+    game: String(row.game ?? ''),
+    rating: nullableNumber(row.rating),
+    createdAt: String(row.created_at ?? ''),
+  };
+}
 
 async function notifyWebApplication(env: Env, gameTitle: string, occurrenceDate: string | null) {
   const chatId = env.TELEGRAM_APPLICATIONS_CHAT_ID ?? env.APPLICATION_NOTIFY_CHAT_ID;
@@ -440,6 +463,34 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if (request.method === 'POST' && path === '/api/auth/login') return login(request, env);
   if (request.method === 'GET' && path === '/api/catalog') return json(await publicCatalog(env));
   if (request.method === 'GET' && path === '/api/calendar') return json(await publicCalendar(env));
+  if (request.method === 'GET' && path === '/api/reviews') {
+    try {
+      const { results } = await env.DB.prepare(`SELECT id, name, game, review_text, rating, created_at
+        FROM reviews WHERE status = 'published' AND publication_consent = 1
+        ORDER BY created_at DESC LIMIT 30`).all();
+      return json({ reviews: results.map((row) => toPublicReview(row as Row)) });
+    } catch (error) {
+      if (isMissingSchemaFeature(error)) return json({ reviews: [] });
+      throw error;
+    }
+  }
+  if (request.method === 'POST' && path === '/api/reviews') {
+    const body = await readBody(request);
+    if (!isRecord(body) || body.publicationConsent !== true) return json({ ok: false, error: 'Подтвердите разрешение на публикацию отзыва.' }, 400);
+    if (text(body.website, 100)) return json({ ok: true, notice: 'Отзыв принят.' }, 202);
+    const name = text(body.name, 100), contact = text(body.contact, 120), review = text(body.review, 4000), rating = nullableNumber(body.rating);
+    if (!name || !contact || !review || (rating !== null && (!Number.isInteger(rating) || rating < 1 || rating > 5))) return json({ ok: false, error: 'Заполните имя, контакт и текст отзыва.' }, 400);
+    if (await rateLimit(`review:${clientIp(request)}`, env)) return json({ ok: false, error: 'Слишком много отправок. Попробуйте через 15 минут.' }, 429, { 'Retry-After': '900' });
+    const timestamp = nowIso();
+    try {
+      await env.DB.prepare(`INSERT INTO reviews (id, name, contact, game, review_text, rating, publication_consent, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, 1, 'pending', ?, ?)`).bind(id(), name, contact, text(body.game, 200), review, rating, timestamp, timestamp).run();
+    } catch (error) {
+      if (isMissingSchemaFeature(error)) return json({ ok: false, error: 'Отзывы временно недоступны. Попробуйте позже.' }, 503);
+      throw error;
+    }
+    return json({ ok: true, notice: 'Отзыв отправлен на проверку.' }, 201);
+  }
   if (request.method === 'GET' && path === '/api/applications') {
     const game = await findSelection(env, text(url.searchParams.get('event'), 100), text(url.searchParams.get('date'), 10));
     return game ? json({ game }) : json({ error: 'Выбранная игра или дата больше недоступны.' }, 404);
@@ -497,6 +548,38 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if (request.method === 'GET' && path === '/api/master/applications') {
     const { results } = await env.DB.prepare('SELECT * FROM applications ORDER BY created_at DESC LIMIT 200').all();
     return json({ applications: results });
+  }
+  const applicationMatch = path.match(/^\/api\/master\/applications\/([^/]+)$/);
+  if (applicationMatch && request.method === 'PATCH') {
+    if (await requireCsrf(request, session)) return json({ error: 'Недействительный CSRF-токен.' }, 403);
+    const applicationId = decodeURIComponent(applicationMatch[1]);
+    const body = await readBody(request);
+    const status = isRecord(body) ? crmStatus(body.status) : null;
+    if (!status) return json({ error: 'Неизвестный этап CRM-воронки.' }, 400);
+    const timestamp = nowIso();
+    const result = await env.DB.prepare('UPDATE applications SET status = ?, updated_at = ? WHERE id = ?').bind(status, timestamp, applicationId).run();
+    if (!result.meta.changes) return json({ error: 'Заявка не найдена.' }, 404);
+    try { await env.DB.prepare('INSERT INTO application_status_history (id, application_id, status, created_at) VALUES (?, ?, ?, ?)').bind(id(), applicationId, status, timestamp).run(); } catch (error) { if (!isMissingSchemaFeature(error)) throw error; }
+    const updated = await env.DB.prepare('SELECT * FROM applications WHERE id = ?').bind(applicationId).first<Row>();
+    return json({ application: updated });
+  }
+  if (request.method === 'GET' && path === '/api/master/reviews') {
+    const { results } = await env.DB.prepare('SELECT * FROM reviews ORDER BY created_at DESC LIMIT 200').all();
+    return json({ reviews: results });
+  }
+  const reviewMatch = path.match(/^\/api\/master\/reviews\/([^/]+)$/);
+  if (reviewMatch && (request.method === 'PATCH' || request.method === 'DELETE')) {
+    if (await requireCsrf(request, session)) return json({ error: 'Недействительный CSRF-токен.' }, 403);
+    const reviewId = decodeURIComponent(reviewMatch[1]);
+    if (request.method === 'DELETE') {
+      const result = await env.DB.prepare('DELETE FROM reviews WHERE id = ?').bind(reviewId).run();
+      return result.meta.changes ? json({ ok: true }) : json({ error: 'Отзыв не найден.' }, 404);
+    }
+    const body = await readBody(request);
+    const status = isRecord(body) ? reviewStatus(body.status) : null;
+    if (!status) return json({ error: 'Неизвестный статус отзыва.' }, 400);
+    const result = await env.DB.prepare('UPDATE reviews SET status = ?, updated_at = ? WHERE id = ?').bind(status, nowIso(), reviewId).run();
+    return result.meta.changes ? json({ ok: true }) : json({ error: 'Отзыв не найден.' }, 404);
   }
   if (request.method === 'GET' && path === '/api/master/participants') {
     const { results } = await env.DB.prepare(`SELECT p.event_id, p.occurrence_date, p.status, p.created_at,

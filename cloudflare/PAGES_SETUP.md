@@ -57,7 +57,7 @@ pnpm exec wrangler d1 migrations list dndmaster-calendar --remote --config cloud
 
 Сначала примените миграции, затем задеплойте Worker (`pnpm run deploy` из `cloudflare/api-worker`), чтобы новый `/api/catalog` сразу видел таблицу `catalog_items`. Не удаляйте legacy-таблицу до проверки витрины и мастерского CRUD.
 
-Миграция `0006_technical_iteration.sql` обязательна перед деплоем обновлённого Worker: она добавляет enum-статус публикации каталога и поля UTM к заявке. Задайте в настройках Worker секреты `TELEGRAM_BOT_TOKEN` и `TELEGRAM_APPLICATIONS_CHAT_ID`, а `PUBLIC_SITE_ORIGIN` укажите в `[vars]` как Pages origin. API сначала сохраняет заявку в D1 и только затем пытается отправить уведомление; недоступность Telegram не отклоняет заявку.
+Миграции `0006_technical_iteration.sql` и `0007_growth_features.sql` обязательны перед деплоем обновлённого Worker: они добавляют enum-статус публикации каталога, поля UTM к заявке, историю CRM-этапов и очередь отзывов с отдельным разрешением на публикацию. Задайте в настройках Worker секреты `TELEGRAM_BOT_TOKEN` и `TELEGRAM_APPLICATIONS_CHAT_ID`, а `PUBLIC_SITE_ORIGIN` укажите в `[vars]` как Pages origin. API сначала сохраняет заявку в D1 и только затем пытается отправить уведомление; недоступность Telegram не отклоняет заявку.
 
 Миграция `0004_calendar_catalog_link.sql` добавляет связь календарной встречи с карточкой каталога. Она позволяет показывать в подробностях календаря обложку и описание выбранной игры; примените её вместе с остальными ожидающими миграциями до деплоя Worker.
 

@@ -5,6 +5,7 @@ globalThis.fetch = async (input) => {
   const url = new URL(input instanceof URL ? input.toString() : typeof input === 'string' ? input : input.url);
   if (url.pathname === '/api/calendar') return Response.json({ events: [] });
   if (url.pathname === '/api/catalog') return Response.json({ items: [] });
+  if (url.pathname === '/api/reviews') return Response.json({ reviews: [] });
   return Response.json({ status: 'ok' });
 };
 
@@ -28,6 +29,7 @@ async function expectJsonList(path, key) {
 
 await expectJsonList('calendar', 'events');
 await expectJsonList('catalog', 'items');
+await expectJsonList('reviews', 'reviews');
 
 const missingOrigin = await call('calendar', {}, {});
 if (missingOrigin.status !== 503) throw new Error(`Expected unconfigured API origin to return 503, received ${missingOrigin.status}`);

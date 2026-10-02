@@ -50,6 +50,14 @@ const eventStatusLabels: Record<string, string> = {
   ongoing: 'Идёт набор',
   open_slot: 'Свободный слот',
 };
+const crmStatusLabels: Record<string, string> = {
+  new: 'Новая заявка',
+  contacted: 'Связались',
+  confirmed: 'Подтверждено',
+  attended: 'Пришёл',
+  repeat_sale: 'Повторная продажа',
+};
+const reviewStatusLabels: Record<string, string> = { pending: 'На проверке', published: 'Опубликован', rejected: 'Отклонён' };
 function eventTypeLabel(value: MasterEvent['game_type']) { return eventTypeLabels[value] ?? 'Ваншот'; }
 function eventStatusLabel(value: string) { return eventStatusLabels[value] ?? value; }
 
@@ -321,16 +329,48 @@ function CalendarPage({ session }: { session: Session }) {
 function ApplicationsPage({ session }: { session: Session }) {
   const [applications, setApplications] = useState<any[]>([]);
   const [participants, setParticipants] = useState<any[]>([]);
-  useEffect(() => {
-    Promise.all([
-      api<{ applications: any[] }>('/api/master/applications'),
-      api<{ participants: any[] }>('/api/master/participants'),
-    ]).then(([applicationData, participantData]) => {
-      setApplications(applicationData.applications);
-      setParticipants(participantData.participants);
-    }).catch(() => undefined);
-  }, []);
-  return <MasterLayout session={session}><section className="master-content"><div className="master-heading"><div><span className="eyebrow">входящие</span><h1>Заявки<br /><em>игроков</em></h1></div></div><div className="master-applications"><div className="master-subheading"><span className="eyebrow">из мини‑аппа</span><h2>Записи на игры</h2></div>{participants.map((item) => <article className="master-application" key={`${item.event_id}:${item.occurrence_date}:${item.telegram_user_id}`}><div><span>{item.occurrence_date} · {item.start_time || 'время уточняется'}</span><h2>{item.title || 'Игра'}</h2><strong>{[item.first_name, item.last_name].filter(Boolean).join(' ') || 'Игрок'}{item.username ? ` · @${item.username}` : ''}</strong></div><p>{item.status === 'waitlist' ? 'Лист ожидания' : 'Подтверждено'}</p></article>)}{!participants.length && <div className="master-empty">Записей из мини‑аппа пока нет.</div>}</div><div className="master-applications"><div className="master-subheading"><span className="eyebrow">веб‑форма</span><h2>Заявки игроков</h2></div>{applications.map((item) => <article className="master-application" key={item.id}><div><span>{new Date(item.created_at).toLocaleString('ru-RU')}</span><h2>{item.name}</h2><a href={`https://t.me/${String(item.contact).replace(/^@/, '')}`} target="_blank" rel="noreferrer">{item.contact}</a></div><p>{item.wishes || item.system || 'Без дополнительных пожеланий'}</p>{[item.utm_source, item.utm_medium, item.utm_campaign].some(Boolean) && <small>Источник: {[item.utm_source, item.utm_medium, item.utm_campaign].filter(Boolean).join(' · ')}</small>}<strong>{item.players} игроков</strong></article>)}{!applications.length && <div className="master-empty">Новых заявок пока нет.</div>}</div></section></MasterLayout>;
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [error, setError] = useState('');
+  const [pendingId, setPendingId] = useState('');
+
+  const load = () => Promise.all([
+    api<{ applications: any[] }>('/api/master/applications'),
+    api<{ participants: any[] }>('/api/master/participants'),
+    api<{ reviews: any[] }>('/api/master/reviews'),
+  ]).then(([applicationData, participantData, reviewData]) => {
+    setApplications(applicationData.applications);
+    setParticipants(participantData.participants);
+    setReviews(reviewData.reviews);
+  }).catch((reason) => setError(reason instanceof Error ? reason.message : 'Не удалось загрузить входящие данные.'));
+
+  useEffect(() => { load(); }, []);
+
+  async function updateApplication(id: string, status: string) {
+    setPendingId(id); setError('');
+    try {
+      const result = await api<{ application: any }>(`/api/master/applications/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'X-CSRF-Token': session.csrfToken ?? '' }, body: JSON.stringify({ status }) });
+      setApplications((current) => current.map((item) => item.id === id ? result.application : item));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Не удалось обновить этап заявки.'); }
+    finally { setPendingId(''); }
+  }
+
+  async function updateReview(id: string, status: string) {
+    setPendingId(id); setError('');
+    try {
+      await api(`/api/master/reviews/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'X-CSRF-Token': session.csrfToken ?? '' }, body: JSON.stringify({ status }) });
+      setReviews((current) => current.map((item) => item.id === id ? { ...item, status } : item));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Не удалось обновить отзыв.'); }
+    finally { setPendingId(''); }
+  }
+
+  return <MasterLayout session={session}><section className="master-content">
+    <div className="master-heading"><div><span className="eyebrow">входящие</span><h1>Заявки<br /><em>игроков</em></h1></div><button type="button" className="button button-ghost" onClick={load}><RefreshCw size={14} /> Обновить</button></div>
+    {error && <div className="master-error" role="alert">{error}</div>}
+    <div className="master-funnel"><span className="eyebrow">CRM-воронка</span>{Object.entries(crmStatusLabels).map(([status, label]) => <span key={status}><b>{applications.filter((item) => (item.status || 'new') === status).length}</b>{label}</span>)}</div>
+    <div className="master-applications"><div className="master-subheading"><span className="eyebrow">из мини‑аппа</span><h2>Записи на игры</h2></div>{participants.map((item) => <article className="master-application" key={`${item.event_id}:${item.occurrence_date}:${item.telegram_user_id}`}><div><span>{item.occurrence_date} · {item.start_time || 'время уточняется'}</span><h2>{item.title || 'Игра'}</h2><strong>{[item.first_name, item.last_name].filter(Boolean).join(' ') || 'Игрок'}{item.username ? ` · @${item.username}` : ''}</strong></div><p>{item.status === 'waitlist' ? 'Лист ожидания' : 'Подтверждено'}</p></article>)}{!participants.length && <div className="master-empty">Записей из мини‑аппа пока нет.</div>}</div>
+    <div className="master-applications"><div className="master-subheading"><span className="eyebrow">веб‑форма</span><h2>Заявки и этапы</h2></div>{applications.map((item) => { const status = item.status || 'new'; return <article className="master-application" key={item.id}><div><span>{new Date(item.created_at).toLocaleString('ru-RU')}</span><h2>{item.name}</h2><a href={`https://t.me/${String(item.contact).replace(/^@/, '')}`} target="_blank" rel="noreferrer">{item.contact}</a></div><p>{item.wishes || item.system || 'Без дополнительных пожеланий'}</p><div className="master-application-meta">{[item.utm_source, item.utm_medium, item.utm_campaign].some(Boolean) && <small>Источник: {[item.utm_source, item.utm_medium, item.utm_campaign].filter(Boolean).join(' · ')}</small>}<strong>{item.players} игроков</strong><label className="master-crm-field"><span>Этап</span><select value={status} disabled={pendingId === item.id} onChange={(event) => updateApplication(item.id, event.target.value)} aria-label={`Этап заявки ${item.name}`}>{Object.entries(crmStatusLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label></div></article>; })}{!applications.length && <div className="master-empty">Новых заявок пока нет.</div>}</div>
+    <div className="master-applications"><div className="master-subheading"><span className="eyebrow">модерация</span><h2>Отзывы с разрешением</h2></div>{reviews.map((item) => <article className="master-application master-review-row" key={item.id}><div><span>{new Date(item.created_at).toLocaleString('ru-RU')}</span><h2>{item.name}</h2><strong>{item.game || 'Игра не указана'}{item.rating ? ` · ${item.rating}/5` : ''}</strong></div><p>{item.review_text}</p><label className="master-crm-field"><span>Статус</span><select value={item.status} disabled={pendingId === item.id} onChange={(event) => updateReview(item.id, event.target.value)} aria-label={`Статус отзыва ${item.name}`}>{Object.entries(reviewStatusLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label></article>)}{!reviews.length && <div className="master-empty">Новых отзывов пока нет.</div>}</div>
+  </section></MasterLayout>;
 }
 
 export default function MasterRoutes() {

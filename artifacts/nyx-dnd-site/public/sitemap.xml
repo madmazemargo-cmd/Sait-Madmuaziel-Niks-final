@@ -5,6 +5,14 @@
   <url><loc>__SITE_URL__/calendar/week</loc></url>
   <url><loc>__SITE_URL__/games</loc></url>
   <url><loc>__SITE_URL__/anketa</loc></url>
+  <url><loc>__SITE_URL__/dnd</loc></url>
+  <url><loc>__SITE_URL__/vampire</loc></url>
+  <url><loc>__SITE_URL__/daggerheart</loc></url>
+  <url><loc>__SITE_URL__/cyberpunk</loc></url>
+  <url><loc>__SITE_URL__/novichkam</loc></url>
+  <url><loc>__SITE_URL__/online</loc></url>
+  <url><loc>__SITE_URL__/offline</loc></url>
+  <url><loc>__SITE_URL__/reviews</loc></url>
   <url><loc>__SITE_URL__/privacy</loc></url>
   <url><loc>__SITE_URL__/terms</loc></url>
   <url><loc>__SITE_URL__/offer</loc></url>

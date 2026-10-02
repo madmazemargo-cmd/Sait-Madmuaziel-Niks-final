@@ -2,6 +2,7 @@ const ROUTES = new Map([
   ['healthz', new Set(['GET'])],
   ['calendar', new Set(['GET'])],
   ['catalog', new Set(['GET'])],
+  ['reviews', new Set(['GET', 'POST'])],
   ['applications', new Set(['GET', 'POST'])],
   ['telegram/webhook', new Set(['POST'])],
   ['mini/session', new Set(['POST'])],
@@ -26,7 +27,10 @@ const API_SECURITY_HEADERS = {
 
 function masterMethods(endpoint) {
   if (endpoint === 'master/catalog' || endpoint === 'master/events') return new Set(['GET', 'POST']);
-  if (endpoint === 'master/applications' || endpoint === 'master/participants') return new Set(['GET']);
+  if (endpoint === 'master/participants' || endpoint === 'master/reviews') return new Set(['GET']);
+  if (endpoint === 'master/applications') return new Set(['GET']);
+  if (/^master\/applications\/[^/]+$/.test(endpoint)) return new Set(['PATCH']);
+  if (/^master\/reviews\/[^/]+$/.test(endpoint)) return new Set(['PATCH', 'DELETE']);
   if (/^master\/(catalog|events)\/[^/]+$/.test(endpoint)) return new Set(['PATCH', 'DELETE']);
   return null;
 }
