@@ -29,8 +29,9 @@
 - [x] Выполнены ручной Pages deployment `00e1c00e-5218-49d8-b935-7ace0f48ef9f` из проверенного `dist/public` и последующий GitHub Pages deployment `6c82cdc3-76e3-463d-ac39-d7daba622e83`.
 - [x] После Pages deployment проверены `/`, `/privacy`, `/api/healthz`, `/api/calendar`, `/api/catalog`; production и deployment HTML совпадают, главная отдаёт CSP/HSTS/security headers.
 - [x] Задеплоен текущий Worker, версия `124551b9-c030-470b-ae6c-62fa97d9d1f6`; live API показывает новые security headers.
-- [ ] В Worker задать секреты `TELEGRAM_BOT_TOKEN` и `TELEGRAM_WEBHOOK_SECRET`, а также `APPLICATION_NOTIFY_CHAT_ID`. Сейчас через Wrangler виден только `SESSION_PEPPER`.
-- [ ] Выполнить реальный E2E без персональных данных: форма → POST `/api/applications` → строка в D1 → `notified: true` → сообщение в тестовом Telegram-чате → ответ UI. Затем удалить E2E-запись по точному `submissionId`. Заблокировано до получения Telegram token/chat ID.
+- [x] В Worker заданы `TELEGRAM_BOT_TOKEN` и `APPLICATION_NOTIFY_CHAT_ID`; `TELEGRAM_WEBHOOK_SECRET` отложен, он не нужен для уведомления web-заявки.
+- [ ] E2E-заявка сохранилась в D1, но Telegram вернул `Not Found`; вероятная причина — неверный/обрезанный `TELEGRAM_BOT_TOKEN`. Обе синтетические заявки удалены, отсутствие записей проверено.
+- [ ] После повторного сохранения корректного `TELEGRAM_BOT_TOKEN` повторить E2E: форма → POST `/api/applications` → строка в D1 → `notified: true` → сообщение в тестовом Telegram-чате → ответ UI. Затем удалить запись по точному `submissionId`.
 - [ ] Активировать GitHub Actions workflow после публикации изменений и убедиться, что первый успешный запуск действительно приходит из внешнего runner-региона.
 - [ ] Настроить backup/restore D1 и проверить процедуру восстановления на отдельной базе.
 
