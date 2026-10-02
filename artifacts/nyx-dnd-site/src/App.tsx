@@ -875,7 +875,7 @@ function ApplicationPage() {
   const [gameChoice, setGameChoice] = useState('custom');
   const selectionQuery = useGetApplicationSelection(
     { event: eventId, date: occurrenceDate },
-    { query: { queryKey: ['/api/applications', eventId, occurrenceDate], enabled: hasSelection, staleTime: 0, refetchOnMount: true } },
+    { query: { queryKey: ['/api/applications', eventId, occurrenceDate], enabled: hasSelection, staleTime: 0, refetchOnMount: true, retry: false } },
   );
   const submitMutation = useSubmitApplication();
   const [sent, setSent] = useState(false);
