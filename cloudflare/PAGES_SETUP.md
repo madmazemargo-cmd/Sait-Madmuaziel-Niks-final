@@ -36,14 +36,7 @@ pnpm run typecheck
 pnpm exec wrangler secret put SESSION_PEPPER
 ```
 
-Чтобы новая заявка не оставалась только в D1, задайте Worker secrets/vars для уведомления мастера:
-
-```bash
-pnpm exec wrangler secret put TELEGRAM_BOT_TOKEN
-pnpm exec wrangler secret put APPLICATION_NOTIFY_CHAT_ID
-```
-
-`APPLICATION_NOTIFY_CHAT_ID` — числовой `chat_id` личного чата с ботом или ID рабочего Telegram-чата. После этого POST `/api/applications` сохраняет заявку в D1 и отправляет сводку в Telegram; ответ содержит `notified: true`. При временной ошибке Telegram заявка всё равно сохраняется, а Worker пишет ошибку в логи.
+Web-заявки пока сохраняются только в D1 и отображаются в `/master/applications`. Автоматическая отправка новых заявок в Telegram отложена; `TELEGRAM_BOT_TOKEN` используется только функциями Telegram Mini App и webhook.
 
 Перед деплоем проверьте, что `wrangler.toml` указывает на нужную D1-базу (`dndmaster-calendar`). Для миграций вернитесь в корень репозитория и примените файлы из папки `migrations`:
 

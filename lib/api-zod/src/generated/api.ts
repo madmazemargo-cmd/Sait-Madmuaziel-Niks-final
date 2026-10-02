@@ -114,8 +114,6 @@ export const SubmitApplicationResponse = zod.object({
   "error": zod.string().nullish(),
   "notice": zod.string().nullish(),
   "selectionChanged": zod.boolean().nullish(),
-  "notified": zod.boolean().nullish(),
-  "notificationConfigured": zod.boolean().nullish(),
   "game": zod.union([zod.object({
   "id": zod.string(),
   "title": zod.string(),

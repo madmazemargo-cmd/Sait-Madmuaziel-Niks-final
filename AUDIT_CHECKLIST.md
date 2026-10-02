@@ -18,7 +18,7 @@
 - [x] `P1` Добавлены `/privacy`, `/terms`, `/offer`, `/rules`, ссылки из footer и согласия анкеты, а также sitemap entries.
 - [x] `P1` Добавлены security headers для Pages и Worker: HSTS, CSP, X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy.
 - [x] `P1` Добавлен GitHub Actions uptime monitor для главной страницы, Pages `/api/healthz` и Worker `/api/healthz` каждые 5 минут; первый внешний запуск `36983221499` завершился `success` на commit `b57ac80`.
-- [x] `P1` POST заявки теперь сохраняет запись в D1 и при настроенных секретах отправляет сводку мастеру в Telegram с таймаутом 5 секунд.
+- [x] `P1` POST заявки сохраняет запись в D1; новые обращения доступны мастеру в `/master/applications`. Автоматическое Telegram-уведомление для web-заявок отложено.
 - [x] `P2` Локально проверены landing, юридическая страница и анкета через accessibility tree; нет явного отказа клавиатурной навигации на проверенных маршрутах.
 - [x] `P2` `pnpm audit --prod`: critical/high/moderate/low уязвимостей не найдено.
 - [x] `P2` Общий `pnpm run build` снова проходит: для mockup sandbox добавлены безопасные defaults `PORT=5173` и `BASE_PATH=/`; остаётся не влияющее на сборку предупреждение sourcemap tooltip.
@@ -29,9 +29,8 @@
 - [x] Выполнены ручной Pages deployment `00e1c00e-5218-49d8-b935-7ace0f48ef9f` из проверенного `dist/public` и последующий GitHub Pages deployment `6c82cdc3-76e3-463d-ac39-d7daba622e83`.
 - [x] После Pages deployment проверены `/`, `/privacy`, `/api/healthz`, `/api/calendar`, `/api/catalog`; production и deployment HTML совпадают, главная отдаёт CSP/HSTS/security headers.
 - [x] Задеплоен текущий Worker, версия `124551b9-c030-470b-ae6c-62fa97d9d1f6`; live API показывает новые security headers.
-- [x] В Worker заданы `TELEGRAM_BOT_TOKEN` и `APPLICATION_NOTIFY_CHAT_ID`; `TELEGRAM_WEBHOOK_SECRET` отложен, он не нужен для уведомления web-заявки.
-- [ ] E2E-заявка сохранилась в D1, но Telegram вернул `Not Found`. Токен был виден на пользовательском скриншоте/введён как аргумент команды, поэтому он считается скомпрометированным. Обе синтетические заявки удалены, отсутствие записей проверено.
-- [ ] Отозвать старый bot token через `@BotFather`, сохранить новый в `TELEGRAM_BOT_TOKEN` (не передавать его в чат или аргумент команды), затем повторить E2E: форма → POST `/api/applications` → строка в D1 → `notified: true` → сообщение в тестовом Telegram-чате → ответ UI. После проверки удалить запись по точному `submissionId`.
+- [x] Web-заявки работают без Telegram-интеграции: запись сохраняется в D1 и доступна в кабинете мастера.
+- [ ] Telegram Mini App/webhook остаются отдельным отложенным контуром; перед возвращением к нему нужно ротировать ранее раскрытый bot token.
 - [ ] Активировать GitHub Actions workflow после публикации изменений и убедиться, что первый успешный запуск действительно приходит из внешнего runner-региона.
 - [ ] Настроить backup/restore D1 и проверить процедуру восстановления на отдельной базе.
 

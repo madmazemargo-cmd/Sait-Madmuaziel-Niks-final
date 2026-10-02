@@ -15,7 +15,5 @@ export interface ApplicationResponse {
   notice?: string | null;
   /** @nullable */
   selectionChanged?: boolean | null;
-  notified?: boolean | null;
-  notificationConfigured?: boolean | null;
   game?: GameSelection | null;
 }

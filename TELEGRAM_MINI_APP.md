@@ -29,12 +29,10 @@ pnpm exec wrangler d1 migrations apply dndmaster-calendar --remote --config clou
 ```bash
 pnpm exec wrangler secret put TELEGRAM_BOT_TOKEN
 pnpm exec wrangler secret put TELEGRAM_WEBHOOK_SECRET
-pnpm exec wrangler secret put APPLICATION_NOTIFY_CHAT_ID
 pnpm exec wrangler secret put SESSION_PEPPER
 ```
 
 `TELEGRAM_WEBHOOK_SECRET` — случайная строка длиной не менее 32 символов. Токен Telegram никогда не добавляется в Git и не передаётся во фронтенд.
-`APPLICATION_NOTIFY_CHAT_ID` — числовой ID личного чата мастера или рабочего чата, куда отправляются новые заявки с веб-формы.
 
 В `wrangler.toml` уже указаны:
 

@@ -873,7 +873,6 @@ function ApplicationPage() {
   );
   const submitMutation = useSubmitApplication();
   const [sent, setSent] = useState(false);
-  const [notificationPending, setNotificationPending] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [stepError, setStepError] = useState('');
   const [step, setStep] = useState<1 | 2>(1);
@@ -1033,7 +1032,6 @@ function ApplicationPage() {
         setSubmitError(response.error || 'Мастер не смог принять заявку. Попробуйте ещё раз.');
         return;
       }
-      setNotificationPending(response.notified !== true);
       setSent(true);
     } catch (error) {
       setSubmitError(getErrorMessage(error));
@@ -1045,9 +1043,9 @@ function ApplicationPage() {
       <main className="subpage">
         <div className="subpage-head reveal"><div className="eyebrow">первый шаг</div><h1>Вход<br />в <em style={{ color: '#ff716a', fontStyle: 'normal' }}>историю</em></h1><p className="subpage-lead">Расскажи, что ищешь за игровым столом. Анкета ни к чему не обязывает — она помогает мне собрать хорошую группу, где всем будет интересно.</p></div>
         <div className="form-layout">
-           <aside className="form-aside"><div className="section-kicker">Что будет дальше</div><p>В течение суток я отвечу тебе в Telegram: уточню детали, расскажу о выбранной игре и познакомлю с форматом.</p><p>Можно написать с нулевым опытом, с готовым персонажем или с идеей, которую давно хочется сыграть.</p><img src="/assets/table.jpg" alt="Игровой стол с кубиками и листами персонажей" loading="lazy" decoding="async" data-testid="img-application-aside" /></aside>
+           <aside className="form-aside"><div className="section-kicker">Что будет дальше</div><p>Я проверю заявку, уточню детали и свяжусь по указанному контакту, чтобы обсудить игру и формат.</p><p>Можно написать с нулевым опытом, с готовым персонажем или с идеей, которую давно хочется сыграть.</p><img src="/assets/table.jpg" alt="Игровой стол с кубиками и листами персонажей" loading="lazy" decoding="async" data-testid="img-application-aside" /></aside>
            <div className="form-card">
-              {sent ? <div className="success-card" data-testid="application-success"><Check size={25} color="#d8ff55" /><h2>Заявка сохранена</h2><p>{notificationPending ? <>Спасибо, {form.name}. Анкета сохранена, но уведомление мастеру ещё не доставлено. Напишите Никс в Telegram, чтобы не ждать.</> : <>Спасибо, {form.name}. Заявка дошла до Никс — она ответит в Telegram в течение суток.</>}</p><div className="hero-actions"><a href="https://t.me/mad_maze_elle" target="_blank" rel="noreferrer" className="button button-primary" data-testid="button-success-telegram">Открыть Telegram <ArrowUpRight size={15} /></a><Link href="/calendar" className="button button-ghost" data-testid="button-success-calendar">Посмотреть календарь <ArrowUpRight size={15} /></Link></div></div> : <form onSubmit={submit} data-testid="application-form">
+              {sent ? <div className="success-card" data-testid="application-success"><Check size={25} color="#d8ff55" /><h2>Заявка сохранена</h2><p>Спасибо, {form.name}. Заявка добавлена в список новых обращений. Я проверю её и свяжусь с вами по указанному контакту.</p><div className="hero-actions"><a href="https://t.me/mad_maze_elle" target="_blank" rel="noreferrer" className="button button-primary" data-testid="button-success-telegram">Открыть контакт <ArrowUpRight size={15} /></a><Link href="/calendar" className="button button-ghost" data-testid="button-success-calendar">Посмотреть календарь <ArrowUpRight size={15} /></Link></div></div> : <form onSubmit={submit} data-testid="application-form">
                 <div className="form-card-head"><div><span className="section-kicker">короткая анкета</span><h2>{selectedGame ? <>Заявка<br />на игру</> : <>Пара вопросов<br />перед броском</>}</h2></div><div className="form-step-indicator" aria-label={`Шаг ${step} из 2`}><span className={step === 1 ? 'is-active' : ''}>01<br /><small>контакт</small></span><i aria-hidden="true" /><span className={step === 2 ? 'is-active' : ''}>02<br /><small>детали</small></span></div></div>
                 {selectionQuery.isLoading && <div className="form-status" role="status">Проверяю выбранную игру…</div>}
                 {selectionQuery.isError && <div className="form-status error" role="alert">Не удалось проверить выбранную игру. Вернитесь в календарь и выберите актуальную дату.</div>}

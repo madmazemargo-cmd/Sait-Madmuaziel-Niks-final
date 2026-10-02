@@ -311,10 +311,6 @@ components:
           type: ["string", "null"]
         selectionChanged:
           type: ["boolean", "null"]
-        notified:
-          type: ["boolean", "null"]
-        notificationConfigured:
-          type: ["boolean", "null"]
         game:
           anyOf:
             - $ref: "#/components/schemas/GameSelection"
