@@ -30,8 +30,8 @@
 - [x] После Pages deployment проверены `/`, `/privacy`, `/api/healthz`, `/api/calendar`, `/api/catalog`; production и deployment HTML совпадают, главная отдаёт CSP/HSTS/security headers.
 - [x] Задеплоен текущий Worker, версия `124551b9-c030-470b-ae6c-62fa97d9d1f6`; live API показывает новые security headers.
 - [x] В Worker заданы `TELEGRAM_BOT_TOKEN` и `APPLICATION_NOTIFY_CHAT_ID`; `TELEGRAM_WEBHOOK_SECRET` отложен, он не нужен для уведомления web-заявки.
-- [ ] E2E-заявка сохранилась в D1, но Telegram вернул `Not Found`; вероятная причина — неверный/обрезанный `TELEGRAM_BOT_TOKEN`. Обе синтетические заявки удалены, отсутствие записей проверено.
-- [ ] После повторного сохранения корректного `TELEGRAM_BOT_TOKEN` повторить E2E: форма → POST `/api/applications` → строка в D1 → `notified: true` → сообщение в тестовом Telegram-чате → ответ UI. Затем удалить запись по точному `submissionId`.
+- [ ] E2E-заявка сохранилась в D1, но Telegram вернул `Not Found`. Токен был виден на пользовательском скриншоте/введён как аргумент команды, поэтому он считается скомпрометированным. Обе синтетические заявки удалены, отсутствие записей проверено.
+- [ ] Отозвать старый bot token через `@BotFather`, сохранить новый в `TELEGRAM_BOT_TOKEN` (не передавать его в чат или аргумент команды), затем повторить E2E: форма → POST `/api/applications` → строка в D1 → `notified: true` → сообщение в тестовом Telegram-чате → ответ UI. После проверки удалить запись по точному `submissionId`.
 - [ ] Активировать GitHub Actions workflow после публикации изменений и убедиться, что первый успешный запуск действительно приходит из внешнего runner-региона.
 - [ ] Настроить backup/restore D1 и проверить процедуру восстановления на отдельной базе.
 
