@@ -279,6 +279,9 @@ function Shell({ children }: { children: ReactNode }) {
             <a href="https://discord.com/invite/madmazeellednd" target="_blank" rel="noreferrer" data-testid="link-discord">Discord</a>
             <Link href="/anketa" data-testid="link-footer-apply">Заполнить анкету</Link>
             <a className="footer-support" href="https://dzen.ru/mad_maze_elle_dnd?donate=true" target="_blank" rel="noreferrer" data-testid="link-support">Поддержать проект</a>
+            <Link href="/privacy">Политика данных</Link>
+            <Link href="/terms">Условия</Link>
+            <Link href="/offer">Оферта</Link>
             <a className="footer-icons-credit" href="https://www.flaticon.com/uicons" target="_blank" rel="noreferrer">Иконки: Flaticon UIcons</a>
           </div>
         </footer>
@@ -768,6 +771,7 @@ function ApplicationPage() {
   );
   const submitMutation = useSubmitApplication();
   const [sent, setSent] = useState(false);
+  const [notificationPending, setNotificationPending] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [consent, setConsent] = useState(false);
   const [submissionId] = useState(() => crypto.randomUUID());
@@ -835,6 +839,7 @@ function ApplicationPage() {
         setSubmitError(response.error || 'Мастер не смог принять заявку. Попробуйте ещё раз.');
         return;
       }
+      setNotificationPending(response.notified !== true);
       setSent(true);
     } catch (error) {
       setSubmitError(getErrorMessage(error));
@@ -848,16 +853,55 @@ function ApplicationPage() {
         <div className="form-layout">
           <aside className="form-aside"><div className="section-kicker">Что будет дальше</div><p>В течение суток я отвечу тебе в Telegram: уточню детали, расскажу о выбранной игре и познакомлю с форматом.</p><p>Можно написать с нулевым опытом, с готовым персонажем или с идеей, которую давно хочется сыграть.</p><img src="/assets/cards.jpg" alt="Карты для игры" loading="lazy" decoding="async" data-testid="img-application-aside" /></aside>
           <div className="form-card">
-             {sent ? <div className="success-card" data-testid="application-success"><Check size={25} color="#d8ff55" /><h2>Заявка отправлена</h2><p>Спасибо, {form.name}. Заявка дошла до Никс — она ответит в Telegram в течение суток.</p><div className="hero-actions"><a href="https://t.me/mad_maze_elle" target="_blank" rel="noreferrer" className="button button-primary" data-testid="button-success-telegram">Открыть Telegram <ArrowUpRight size={15} /></a><Link href="/calendar" className="button button-ghost" data-testid="button-success-calendar">Посмотреть календарь <ArrowUpRight size={15} /></Link></div></div> : <form onSubmit={submit} data-testid="application-form"><h2>{selectedGame ? <>Заявка<br />на игру</> : <>Пара вопросов<br />перед броском</>}</h2>
+             {sent ? <div className="success-card" data-testid="application-success"><Check size={25} color="#d8ff55" /><h2>Заявка сохранена</h2><p>{notificationPending ? <>Спасибо, {form.name}. Анкета сохранена, но уведомление мастеру ещё не доставлено. Напишите Никс в Telegram, чтобы не ждать.</> : <>Спасибо, {form.name}. Заявка дошла до Никс — она ответит в Telegram в течение суток.</>}</p><div className="hero-actions"><a href="https://t.me/mad_maze_elle" target="_blank" rel="noreferrer" className="button button-primary" data-testid="button-success-telegram">Открыть Telegram <ArrowUpRight size={15} /></a><Link href="/calendar" className="button button-ghost" data-testid="button-success-calendar">Посмотреть календарь <ArrowUpRight size={15} /></Link></div></div> : <form onSubmit={submit} data-testid="application-form"><h2>{selectedGame ? <>Заявка<br />на игру</> : <>Пара вопросов<br />перед броском</>}</h2>
                {selectionQuery.isLoading && <div className="form-status" role="status">Проверяю выбранную игру…</div>}
                {selectionQuery.isError && <div className="form-status error" role="alert">Не удалось проверить выбранную игру. Вернитесь в календарь и выберите актуальную дату.</div>}
                {selectedGame && <div className="selected-game" data-testid="selected-game"><span className="section-kicker">Вы выбрали</span><strong>{selectedGame.title}</strong><span>{selectedGame.dateLabel} · {selectedGame.time} · {selectedGame.place}</span><small>{selectedGame.price} · {selectedGame.location}</small></div>}
-               <div className="field-grid"><div className="field"><label htmlFor="name">Как тебя зовут *</label><input id="name" value={form.name} onChange={(event) => update('name', event.target.value)} placeholder="Имя или ник" required data-testid="input-name" /></div><div className="field"><label htmlFor="telegram">Telegram *</label><input id="telegram" value={form.contact} onChange={(event) => update('contact', event.target.value)} placeholder="@username" required data-testid="input-telegram" /></div><div className="field"><label htmlFor="players">Сколько будет игроков *</label><input id="players" type="number" min="1" max="20" value={form.players} onChange={(event) => update('players', event.target.value)} required data-testid="input-players" /></div>{!selectedGame && <div className="field"><label htmlFor="game">Какая игра интересует</label><select id="game" value={form.game} onChange={(event) => update('game', event.target.value)} data-testid="select-game"><option value="">Хочу обсудить свою идею</option>{games.map((game) => <option key={`${game.id}-${game.dateISO}`} value={game.title}>{game.title} · {game.date}</option>)}</select></div>}<div className="field"><label htmlFor="format">Формат</label><select id="format" value={form.format} onChange={(event) => update('format', event.target.value)}><option>Ваншот на одну встречу</option><option>Небольшое приключение</option><option>Долгая кампания</option><option>Пока не знаю</option></select></div><div className="field"><label htmlFor="place">Онлайн или офлайн</label><select id="place" value={form.place} onChange={(event) => update('place', event.target.value)}><option>Онлайн</option><option>Офлайн в Москве</option><option>Готовы обсудить</option></select></div><div className="field full"><label htmlFor="experience">Игровой опыт</label><input id="experience" value={form.experience} onChange={(event) => update('experience', event.target.value)} placeholder="Например: совсем новичок или играю 3 года" /></div><div className="field full"><label htmlFor="system">Система или жанр</label><input id="system" value={form.system} onChange={(event) => update('system', event.target.value)} placeholder="Например: D&D 5e, мистика, хоррор" /></div><div className="field full"><label htmlFor="wishes">Что хочется получить от игры</label><textarea id="wishes" value={form.wishes} onChange={(event) => update('wishes', event.target.value)} placeholder="Больше драмы? Исследований? Дурацких шуток в опасном подземелье?" /></div><div className="field full"><label htmlFor="schedule">Когда удобно играть</label><textarea id="schedule" value={form.schedule} onChange={(event) => update('schedule', event.target.value)} placeholder="Дни недели, время, желаемая частота" /></div></div><div className="form-honeypot" aria-hidden="true"><label htmlFor="website">Не заполняйте это поле</label><input id="website" name="website" value={form.website} onChange={(event) => update('website', event.target.value)} tabIndex={-1} autoComplete="off" /></div><label className="consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} required /><span>Я согласна, что мои ответы и контакт будут отправлены мастеру в Telegram для обсуждения игры.</span></label>{submitError && <div className="form-status error" role="alert">{submitError} Можно <a href="https://t.me/mad_maze_elle" target="_blank" rel="noreferrer">написать мастеру в Telegram</a>.</div>}<button className="button button-primary" type="submit" disabled={submitMutation.isPending || selectionQuery.isLoading || Boolean(selectionQuery.isError) || !consent} data-testid="button-submit-application">{submitMutation.isPending ? 'Отправляю…' : 'Отправить заявку мастеру'} <ArrowUpRight size={15} /></button></form>}
+               <div className="field-grid"><div className="field"><label htmlFor="name">Как тебя зовут *</label><input id="name" value={form.name} onChange={(event) => update('name', event.target.value)} placeholder="Имя или ник" required data-testid="input-name" /></div><div className="field"><label htmlFor="telegram">Telegram *</label><input id="telegram" value={form.contact} onChange={(event) => update('contact', event.target.value)} placeholder="@username" required data-testid="input-telegram" /></div><div className="field"><label htmlFor="players">Сколько будет игроков *</label><input id="players" type="number" min="1" max="20" value={form.players} onChange={(event) => update('players', event.target.value)} required data-testid="input-players" /></div>{!selectedGame && <div className="field"><label htmlFor="game">Какая игра интересует</label><select id="game" value={form.game} onChange={(event) => update('game', event.target.value)} data-testid="select-game"><option value="">Хочу обсудить свою идею</option>{games.map((game) => <option key={`${game.id}-${game.dateISO}`} value={game.title}>{game.title} · {game.date}</option>)}</select></div>}<div className="field"><label htmlFor="format">Формат</label><select id="format" value={form.format} onChange={(event) => update('format', event.target.value)}><option>Ваншот на одну встречу</option><option>Небольшое приключение</option><option>Долгая кампания</option><option>Пока не знаю</option></select></div><div className="field"><label htmlFor="place">Онлайн или офлайн</label><select id="place" value={form.place} onChange={(event) => update('place', event.target.value)}><option>Онлайн</option><option>Офлайн в Москве</option><option>Готовы обсудить</option></select></div><div className="field full"><label htmlFor="experience">Игровой опыт</label><input id="experience" value={form.experience} onChange={(event) => update('experience', event.target.value)} placeholder="Например: совсем новичок или играю 3 года" /></div><div className="field full"><label htmlFor="system">Система или жанр</label><input id="system" value={form.system} onChange={(event) => update('system', event.target.value)} placeholder="Например: D&D 5e, мистика, хоррор" /></div><div className="field full"><label htmlFor="wishes">Что хочется получить от игры</label><textarea id="wishes" value={form.wishes} onChange={(event) => update('wishes', event.target.value)} placeholder="Больше драмы? Исследований? Дурацких шуток в опасном подземелье?" /></div><div className="field full"><label htmlFor="schedule">Когда удобно играть</label><textarea id="schedule" value={form.schedule} onChange={(event) => update('schedule', event.target.value)} placeholder="Дни недели, время, желаемая частота" /></div></div><div className="form-honeypot" aria-hidden="true"><label htmlFor="website">Не заполняйте это поле</label><input id="website" name="website" value={form.website} onChange={(event) => update('website', event.target.value)} tabIndex={-1} autoComplete="off" /></div><label className="consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} required /><span>Я согласна на обработку ответов и контакта для обсуждения игры. <Link href="/privacy">Политика данных</Link> · <Link href="/terms">Условия</Link></span></label>{submitError && <div className="form-status error" role="alert">{submitError} Можно <a href="https://t.me/mad_maze_elle" target="_blank" rel="noreferrer">написать мастеру в Telegram</a>.</div>}<button className="button button-primary" type="submit" disabled={submitMutation.isPending || selectionQuery.isLoading || Boolean(selectionQuery.isError) || !consent} data-testid="button-submit-application">{submitMutation.isPending ? 'Отправляю…' : 'Отправить заявку мастеру'} <ArrowUpRight size={15} /></button></form>}
           </div>
         </div>
       </main>
     </Shell>
   );
+}
+
+type LegalPageKind = 'privacy' | 'terms' | 'offer';
+
+function LegalPage({ kind }: { kind: LegalPageKind }) {
+  const content: Record<LegalPageKind, { title: string; lead: string; sections: Array<[string, string]> }> = {
+    privacy: {
+      title: 'Политика обработки данных',
+      lead: 'Какие данные нужны для подбора игры и как с ними обращаться.',
+      sections: [
+        ['Какие данные мы получаем', 'Имя или ник, Telegram-контакт, количество игроков, пожелания к игре, опыт, расписание и дополнительные ограничения. Обязательны только поля, нужные для обратной связи.'],
+        ['Зачем они нужны', 'Данные используются для связи, подбора формата и организации участия в игре. Мы не продаём анкеты и не используем их для рассылок без отдельного согласия.'],
+        ['Срок хранения и удаление', 'Заявки хранятся столько, сколько нужно для обработки обращения и истории договорённостей. Для исправления или удаления данных напишите в Telegram: @mad_maze_elle.'],
+        ['Передача третьим лицам', 'Контакт и содержание заявки могут обрабатываться сервисами, необходимыми для работы сайта и связи с мастером, включая Cloudflare, базу данных и Telegram.'],
+      ],
+    },
+    terms: {
+      title: 'Условия участия',
+      lead: 'Правила записи, оплаты, отмены и безопасного общения за игровым столом.',
+      sections: [
+        ['Запись', 'Заявка не означает автоматическое бронирование. Мастер подтверждает состав группы, формат, дату, стоимость и способ оплаты отдельным сообщением в Telegram.'],
+        ['Стоимость и отмена', 'Актуальная цена указывается в календаре или подтверждении записи. Если планы изменились, предупредите минимум за 48 часов: перенос или возврат согласуются до начала игры.'],
+        ['Безопасность', 'До игры участники согласуют Lines & Veils и способы остановить некомфортную сцену. Запрещены травля, дискриминация, угрозы и публикация личных данных других участников.'],
+        ['Новички и возраст', 'Для каждой встречи действуют свои требования к возрасту и опыту. Если сомневаетесь, укажите это в анкете — формат можно подобрать без экзамена по правилам.'],
+      ],
+    },
+    offer: {
+      title: 'Публичная оферта',
+      lead: 'Условия оказания услуг ведущего настольных ролевых игр.',
+      sections: [
+        ['Предмет', 'Услуга включает подготовку и проведение настольной ролевой игры в согласованном формате, а также организационную связь до встречи. Дата, состав группы, длительность и цена подтверждаются до оплаты.'],
+        ['Порядок заключения', 'Договорённости фиксируются в переписке после обработки анкеты. Оплата или подтверждение участия после согласования условий означает принятие описания выбранной услуги.'],
+        ['Результат и перенос', 'При отмене или переносе заранее согласовывается новая дата либо возврат по условиям подтверждения. Если проведение невозможно по инициативе ведущего, предлагается перенос или возврат.'],
+        ['Контакты', 'Вопросы по записи, оплате и удалению данных: Telegram @mad_maze_elle. Перед оплатой запросите актуальные условия именно вашей игры.'],
+      ],
+    },
+  };
+  const page = content[kind];
+  return <Shell><main className="subpage legal-page"><div className="subpage-head reveal"><div className="eyebrow">документы</div><h1>{page.title}</h1><p className="subpage-lead">{page.lead}</p></div><div className="legal-content">{page.sections.map(([heading, text]) => <section key={heading}><h2>{heading}</h2><p>{text}</p></section>)}<p className="legal-updated">Версия документа: 2 октября 2026 года.</p></div></main></Shell>;
 }
 
 const pageMeta: Record<string, { title: string; description: string }> = {
@@ -881,6 +925,9 @@ const pageMeta: Record<string, { title: string; description: string }> = {
     title: 'Подобрать игру — Мадмуазель Никс',
     description: 'Короткая анкета поможет подобрать систему, сюжет и формат игры под вашу компанию.',
   },
+  '/privacy': { title: 'Политика обработки данных — Мадмуазель Никс', description: 'Как Мадмуазель Никс использует данные из анкеты игроков.' },
+  '/terms': { title: 'Условия участия — Мадмуазель Никс', description: 'Правила записи, оплаты, отмены и безопасного участия в играх.' },
+  '/offer': { title: 'Публичная оферта — Мадмуазель Никс', description: 'Условия оказания услуг ведущего настольных ролевых игр.' },
 };
 
 function Seo() {
@@ -909,7 +956,7 @@ function Seo() {
 function Router() {
   const [location] = useLocation();
   if (location.startsWith('/master')) return <MasterRoutes />;
-  return <ErrorBoundary resetKey={location}><Seo /><Switch><Route path="/" component={Home} /><Route path="/calendar/week" component={() => <CalendarPage initialView="week" />} /><Route path="/calendar" component={() => <CalendarPage initialView="month" />} /><Route path="/anketa" component={ApplicationPage} /><Route path="/games" component={GamesPage} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={location}><Seo /><Switch><Route path="/" component={Home} /><Route path="/calendar/week" component={() => <CalendarPage initialView="week" />} /><Route path="/calendar" component={() => <CalendarPage initialView="month" />} /><Route path="/anketa" component={ApplicationPage} /><Route path="/games" component={GamesPage} /><Route path="/privacy" component={() => <LegalPage kind="privacy" />} /><Route path="/terms" component={() => <LegalPage kind="terms" />} /><Route path="/offer" component={() => <LegalPage kind="offer" />} /><Route path="/rules" component={() => <LegalPage kind="terms" />} /><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
 
 function App() {

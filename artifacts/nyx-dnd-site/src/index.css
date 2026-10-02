@@ -832,3 +832,9 @@
 @media (prefers-reduced-motion: reduce) {
   .calendar-detail-dialog, .calendar-more-dialog { animation: none; }
 }
+
+.legal-content { max-width: 760px; display: grid; gap: 28px; margin-top: 42px; }
+.legal-content section { border-top: 1px solid #44344a; padding-top: 20px; }
+.legal-content h2 { color: #f5eddc; font-family: var(--app-font-serif); font-size: 30px; margin: 0 0 10px; }
+.legal-content p { color: #b5a8b8; font-size: 13px; line-height: 1.75; margin: 0; }
+.legal-updated { color: #8e7d94 !important; font: 10px var(--app-font-mono); }

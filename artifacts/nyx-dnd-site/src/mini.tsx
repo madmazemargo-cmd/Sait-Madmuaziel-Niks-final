@@ -120,8 +120,31 @@ export default function MiniApp() {
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
   const [error, setError] = useState('');
+  const [webApp, setWebApp] = useState<TelegramWebApp | undefined>(() => typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined);
 
-  const webApp = typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined;
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.Telegram?.WebApp) {
+      setWebApp(window.Telegram.WebApp);
+      return;
+    }
+    const scriptId = 'telegram-web-app-script';
+    const existing = document.getElementById(scriptId) as HTMLScriptElement | null;
+    const script = existing ?? Object.assign(document.createElement('script'), {
+      id: scriptId,
+      src: 'https://telegram.org/js/telegram-web-app.js',
+      async: true,
+    });
+    const onLoad = () => setWebApp(window.Telegram?.WebApp);
+    const onError = () => setLoading(false);
+    script.addEventListener('load', onLoad);
+    script.addEventListener('error', onError);
+    if (!existing) document.head.appendChild(script);
+    return () => {
+      script.removeEventListener('load', onLoad);
+      script.removeEventListener('error', onError);
+    };
+  }, []);
 
   async function loadEvents(nextTab = tab, nextFilter = filter) {
     if (!state) return;
@@ -161,7 +184,7 @@ export default function MiniApp() {
       }
     })();
     return () => { active = false; };
-  }, []);
+  }, [webApp]);
 
   const displayedEvents = useMemo(() => events, [events]);
 

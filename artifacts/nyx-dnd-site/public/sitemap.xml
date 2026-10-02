@@ -2,6 +2,10 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>__SITE_URL__/</loc></url>
   <url><loc>__SITE_URL__/calendar</loc></url>
+  <url><loc>__SITE_URL__/calendar/week</loc></url>
   <url><loc>__SITE_URL__/games</loc></url>
   <url><loc>__SITE_URL__/anketa</loc></url>
+  <url><loc>__SITE_URL__/privacy</loc></url>
+  <url><loc>__SITE_URL__/terms</loc></url>
+  <url><loc>__SITE_URL__/offer</loc></url>
 </urlset>

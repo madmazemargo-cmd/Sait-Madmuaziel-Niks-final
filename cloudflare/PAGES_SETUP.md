@@ -14,6 +14,7 @@
 - Root directory: `/`;
 - Environment variable `BASE_PATH`: `/`;
 - Environment variable `SITE_URL`: the exact public Pages URL, for example `https://<project>.pages.dev`;
+- Environment variable `API_ORIGIN`: the exact Worker URL, for example `https://madmuazelle-niks-api.dndmaster.workers.dev`;
 - `VITE_API_BASE_URL` для Pages не нужен: календарь, каталог и заявки проксируются однодоменной Pages Function из `/functions/api/[[path]].js`.
 
 После деплоя Cloudflare выдаст адрес вида `https://<project>.pages.dev`. Pages Function работает на том же адресе, поэтому отдельная настройка CORS для фронтенда не нужна.
@@ -34,6 +35,15 @@ pnpm run typecheck
 ```bash
 pnpm exec wrangler secret put SESSION_PEPPER
 ```
+
+Чтобы новая заявка не оставалась только в D1, задайте Worker secrets/vars для уведомления мастера:
+
+```bash
+pnpm exec wrangler secret put TELEGRAM_BOT_TOKEN
+pnpm exec wrangler secret put APPLICATION_NOTIFY_CHAT_ID
+```
+
+`APPLICATION_NOTIFY_CHAT_ID` — числовой `chat_id` личного чата с ботом или ID рабочего Telegram-чата. После этого POST `/api/applications` сохраняет заявку в D1 и отправляет сводку в Telegram; ответ содержит `notified: true`. При временной ошибке Telegram заявка всё равно сохраняется, а Worker пишет ошибку в логи.
 
 Перед деплоем проверьте, что `wrangler.toml` указывает на нужную D1-базу (`dndmaster-calendar`). Для миграций вернитесь в корень репозитория и примените файлы из папки `migrations`:
 

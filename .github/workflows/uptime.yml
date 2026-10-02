@@ -1,0 +1,41 @@
+name: Uptime monitor
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check production HTML
+        env:
+          SITE_URL: https://sait-madmuaziel-niks-final.pages.dev
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --max-time 20 \
+            --header 'Accept: text/html' \
+            "$SITE_URL/" \
+            | grep -q 'id="root"'
+
+      - name: Check Pages API proxy
+        env:
+          SITE_URL: https://sait-madmuaziel-niks-final.pages.dev
+        run: |
+          set -euo pipefail
+          body="$(curl --fail --silent --show-error --location --max-time 20 \
+            --header 'Accept: application/json' "$SITE_URL/api/healthz")"
+          test "$body" = '{"status":"ok"}'
+
+      - name: Check Worker API
+        run: |
+          set -euo pipefail
+          body="$(curl --fail --silent --show-error --location --max-time 20 \
+            --header 'Accept: application/json' \
+            https://madmuazelle-niks-api.dndmaster.workers.dev/api/healthz)"
+          test "$body" = '{"status":"ok"}'

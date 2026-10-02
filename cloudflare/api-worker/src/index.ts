@@ -14,6 +14,7 @@ export interface Env {
   SESSION_PEPPER?: string;
   RATE_LIMITER?: DurableObjectNamespace;
   TELEGRAM_BOT_TOKEN?: string;
+  APPLICATION_NOTIFY_CHAT_ID?: string;
   TELEGRAM_WEBHOOK_SECRET?: string;
   MINI_APP_URL?: string;
   GAME_TIMEZONE?: string;
@@ -107,6 +108,9 @@ function secure(response: Response, request: Request, env: Env) {
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  headers.set('X-Frame-Options', 'DENY');
+  headers.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+  headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   return new Response(response.body, { status: response.status, headers });
 }
 
@@ -138,6 +142,47 @@ async function readBody(request: Request) {
   const raw = await request.text();
   if (new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES) return null;
   try { return JSON.parse(raw) as unknown; } catch { return null; }
+}
+
+type ApplicationNotificationResult = { configured: boolean; sent: boolean };
+
+async function notifyMasterOfApplication(env: Env, body: Row, applicationId: string): Promise<ApplicationNotificationResult> {
+  const token = env.TELEGRAM_BOT_TOKEN?.trim();
+  const chatId = env.APPLICATION_NOTIFY_CHAT_ID?.trim();
+  if (!token || !chatId) return { configured: false, sent: false };
+
+  const lines = [
+    'Новая заявка с сайта «Мадмуазель Никс»',
+    `ID: ${applicationId}`,
+    `Имя: ${text(body.name, 100)}`,
+    `Контакт: ${text(body.contact, 120)}`,
+    `Игроков: ${String(body.players ?? '')}`,
+    `Формат: ${text(body.format, 200)}`,
+    `Место: ${text(body.place, 200)}`,
+    `Игра: ${text(body.system, 200)}`,
+    `Дата: ${text(body.occurrenceDate, 20) || 'по договорённости'}`,
+    `Когда удобно: ${text(body.schedule, 1000) || 'не указано'}`,
+    `Пожелания: ${text(body.wishes, 1200) || 'не указаны'}`,
+  ];
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: lines.join('\n').slice(0, 3900), disable_web_page_preview: true }),
+      signal: controller.signal,
+    });
+    const result = await response.json().catch(() => ({})) as Row;
+    if (!response.ok || result.ok === false) throw new Error(String(result.description || `Telegram API ${response.status}`));
+    return { configured: true, sent: true };
+  } catch (error) {
+    console.error(JSON.stringify({ message: 'application notification failed', applicationId, error: error instanceof Error ? error.message : String(error) }));
+    return { configured: true, sent: false };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function rateLimit(key: string, env: Env) {
@@ -384,8 +429,10 @@ async function handle(request: Request, env: Env): Promise<Response> {
     const eventId = text(body.eventId, 100) || null, occurrenceDate = validDate(body.occurrenceDate) ? body.occurrenceDate : null;
     if (eventId && occurrenceDate && !await findSelection(env, eventId, occurrenceDate)) return json({ ok: false, error: 'Выбранная игра больше недоступна.', selectionChanged: true }, 409);
     const timestamp = nowIso();
-    await env.DB.prepare(`INSERT INTO applications (id, submission_id, event_id, occurrence_date, event_revision, name, contact, players, format, place, experience, system, genres, tone, wishes, schedule, boundaries, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id(), text(body.submissionId, 100) || id(), eventId, occurrenceDate, text(body.eventRevision, 50) || null, name, contact, players, text(body.format, 200), text(body.place, 200), text(body.experience, 2000), text(body.system, 200), text(body.genres, 500), text(body.tone, 500), text(body.wishes, 4000), text(body.schedule, 2000), text(body.boundaries, 2000), timestamp, timestamp).run();
-    return json({ ok: true });
+    const applicationId = id();
+    await env.DB.prepare(`INSERT INTO applications (id, submission_id, event_id, occurrence_date, event_revision, name, contact, players, format, place, experience, system, genres, tone, wishes, schedule, boundaries, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(applicationId, text(body.submissionId, 100) || applicationId, eventId, occurrenceDate, text(body.eventRevision, 50) || null, name, contact, players, text(body.format, 200), text(body.place, 200), text(body.experience, 2000), text(body.system, 200), text(body.genres, 500), text(body.tone, 500), text(body.wishes, 4000), text(body.schedule, 2000), text(body.boundaries, 2000), timestamp, timestamp).run();
+    const notification = await notifyMasterOfApplication(env, body, applicationId);
+    return json({ ok: true, notified: notification.sent, notificationConfigured: notification.configured });
   }
   const session = await auth(request, env);
   if (!session) return json({ error: 'Требуется вход в кабинет мастера.' }, 401);

@@ -1,4 +1,4 @@
-const API_ORIGIN = 'https://madmuazelle-niks-api.dndmaster.workers.dev';
+const DEFAULT_API_ORIGIN = 'https://madmuazelle-niks-api.dndmaster.workers.dev';
 const ROUTES = new Map([
   ['healthz', new Set(['GET'])],
   ['calendar', new Set(['GET'])],
@@ -49,7 +49,8 @@ export async function onRequest(context) {
  
 async function proxy(context, endpoint) {
   const incomingUrl = new URL(context.request.url);
-  const upstreamUrl = new URL(`/api/${endpoint}`, API_ORIGIN);
+  const apiOrigin = context.env?.API_ORIGIN || DEFAULT_API_ORIGIN;
+  const upstreamUrl = new URL(`/api/${endpoint}`, apiOrigin);
   upstreamUrl.search = incomingUrl.search;
   const headers = new Headers({ Accept: 'application/json' });
   for (const name of ['Content-Type', 'Cookie', 'X-CSRF-Token', 'X-Telegram-Init-Data', 'X-Telegram-Bot-Api-Secret-Token', 'Origin']) {
@@ -60,7 +61,7 @@ async function proxy(context, endpoint) {
     const upstream = await fetch(upstreamUrl, { method: context.request.method, headers, body: ['GET', 'HEAD'].includes(context.request.method) ? undefined : context.request.body, redirect: 'manual' });
     const type = upstream.headers.get('Content-Type') ?? '';
     if (!type.toLowerCase().includes('application/json') && upstream.status !== 204) return jsonError('Источник вернул неверный ответ.', 502);
-    const responseHeaders = new Headers({ 'Content-Type': type || 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin' });
+    const responseHeaders = new Headers({ 'Content-Type': type || 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'X-Frame-Options': 'DENY', 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'", 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains' });
     for (const name of ['Set-Cookie', 'Retry-After', 'Allow']) { const value = upstream.headers.get(name); if (value) responseHeaders.set(name, value); }
     return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
   } catch { return jsonError('Не удалось связаться с API.', 502); }
