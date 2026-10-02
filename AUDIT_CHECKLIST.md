@@ -6,7 +6,7 @@
 
 ## Выполнено в этой проверке
 
-- [x] `P0` Подтверждён Pages project `sait-madmuaziel-niks-final`; текущий production deployment `00e1c00e-5218-49d8-b935-7ace0f48ef9f` доступен по HTTPS.
+- [x] `P0` Подтверждён Pages project `sait-madmuaziel-niks-final`; текущий production deployment `6c82cdc3-76e3-463d-ac39-d7daba622e83` из commit `a5d7f9f` доступен по HTTPS.
 - [x] `P0` Локальная сборка выдаёт `artifacts/nyx-dnd-site/dist/public` и содержит `_headers`, `_routes.json`, `_redirects`, `sitemap.xml` и `index.html`.
 - [x] `P0` Проверены Pages Function guards: разрешены только ожидаемые API-маршруты и методы, неизвестный маршрут даёт 404, большой body даёт 413.
 - [x] `P0` Удалена точная тестовая заявка `submission_id=a`, `name=x`, `contact=@x`.
@@ -17,7 +17,7 @@
 - [x] `P1` Убрана настройка `maximum-scale=1`.
 - [x] `P1` Добавлены `/privacy`, `/terms`, `/offer`, `/rules`, ссылки из footer и согласия анкеты, а также sitemap entries.
 - [x] `P1` Добавлены security headers для Pages и Worker: HSTS, CSP, X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy.
-- [x] `P1` Добавлен GitHub Actions uptime monitor для главной страницы, Pages `/api/healthz` и Worker `/api/healthz` каждые 5 минут.
+- [x] `P1` Добавлен GitHub Actions uptime monitor для главной страницы, Pages `/api/healthz` и Worker `/api/healthz` каждые 5 минут; первый внешний запуск `36983221499` завершился `success` на commit `b57ac80`.
 - [x] `P1` POST заявки теперь сохраняет запись в D1 и при настроенных секретах отправляет сводку мастеру в Telegram с таймаутом 5 секунд.
 - [x] `P2` Локально проверены landing, юридическая страница и анкета через accessibility tree; нет явного отказа клавиатурной навигации на проверенных маршрутах.
 - [x] `P2` `pnpm audit --prod`: critical/high/moderate/low уязвимостей не найдено.
@@ -26,8 +26,8 @@
 ## P0: закрыть до публикации
 
 - [x] Pages production-домен восстановился: production и deployment URL отвечают `200`, публичные DNS-over-HTTPS резолверы возвращают A-записи.
-- [x] Выполнен Pages production deployment `00e1c00e-5218-49d8-b935-7ace0f48ef9f` из проверенного `artifacts/nyx-dnd-site/dist/public`.
-- [x] После Pages deployment проверены `/`, `/privacy`, `/api/healthz`, `/api/calendar`, `/api/catalog`; production и deployment HTML совпадают.
+- [x] Выполнены ручной Pages deployment `00e1c00e-5218-49d8-b935-7ace0f48ef9f` из проверенного `dist/public` и последующий GitHub Pages deployment `6c82cdc3-76e3-463d-ac39-d7daba622e83`.
+- [x] После Pages deployment проверены `/`, `/privacy`, `/api/healthz`, `/api/calendar`, `/api/catalog`; production и deployment HTML совпадают, главная отдаёт CSP/HSTS/security headers.
 - [x] Задеплоен текущий Worker, версия `124551b9-c030-470b-ae6c-62fa97d9d1f6`; live API показывает новые security headers.
 - [ ] В Worker задать секреты `TELEGRAM_BOT_TOKEN` и `TELEGRAM_WEBHOOK_SECRET`, а также `APPLICATION_NOTIFY_CHAT_ID`. Сейчас через Wrangler виден только `SESSION_PEPPER`.
 - [ ] Выполнить реальный E2E без персональных данных: форма → POST `/api/applications` → строка в D1 → `notified: true` → сообщение в тестовом Telegram-чате → ответ UI. Затем удалить E2E-запись по точному `submissionId`. Заблокировано до получения Telegram token/chat ID.
