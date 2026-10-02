@@ -32,4 +32,14 @@ export interface ApplicationInput {
   occurrenceDate?: string | null;
   /** @nullable */
   eventRevision?: string | null;
+  /** @maxLength 100 */
+  utmSource?: string;
+  /** @maxLength 100 */
+  utmMedium?: string;
+  /** @maxLength 100 */
+  utmCampaign?: string;
+  /** @maxLength 100 */
+  utmContent?: string;
+  /** @maxLength 100 */
+  utmTerm?: string;
 }

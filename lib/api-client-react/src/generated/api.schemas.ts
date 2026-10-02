@@ -9,13 +9,23 @@ export interface HealthStatus {
   status: string;
 }
 
+export type CalendarEventGameType = typeof CalendarEventGameType[keyof typeof CalendarEventGameType];
+
+
+export const CalendarEventGameType = {
+  campaign: 'campaign',
+  module: 'module',
+  oneshot: 'oneshot',
+} as const;
+
 export interface CalendarEvent {
   id: string;
   title: string;
   /** @pattern ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ */
   eventDate: string;
   startTime: string;
-  gameType?: 'campaign' | 'module' | 'oneshot' | string;
+  gameType?: CalendarEventGameType;
+  /** @nullable */
   catalogItemId?: string | null;
   status: string;
   /** @nullable */
@@ -88,6 +98,16 @@ export interface ApplicationInput {
   occurrenceDate?: string | null;
   /** @nullable */
   eventRevision?: string | null;
+  /** @maxLength 100 */
+  utmSource?: string;
+  /** @maxLength 100 */
+  utmMedium?: string;
+  /** @maxLength 100 */
+  utmCampaign?: string;
+  /** @maxLength 100 */
+  utmContent?: string;
+  /** @maxLength 100 */
+  utmTerm?: string;
 }
 
 export interface ApplicationResponse {

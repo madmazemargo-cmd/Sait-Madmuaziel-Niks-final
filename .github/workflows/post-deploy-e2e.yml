@@ -1,0 +1,54 @@
+name: Post-deploy smoke and E2E
+
+on:
+  deployment_status:
+    types: [success]
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+  workflow_dispatch:
+  schedule:
+    - cron: '15 4 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: post-deploy-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    if: github.event_name != 'deployment_status' || github.event.deployment_status.environment_url == '' || contains(github.event.deployment_status.environment_url, 'sait-madmuaziel-niks-final.pages.dev')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SITE_URL: https://sait-madmuaziel-niks-final.pages.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Wait for production deployment
+        run: |
+          for attempt in $(seq 1 36); do
+            if curl --fail --silent --show-error --max-time 15 "$SITE_URL/api/healthz" | grep -q '"status":"ok"' && \
+               curl --fail --silent --show-error --max-time 15 "$SITE_URL/" | grep -q 'id="root"'; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Production deployment did not become healthy in six minutes.' >&2
+          exit 1
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm run test:proxy
+      - run: pnpm run test:worker
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run test:catalog
+      - run: pnpm run test:e2e

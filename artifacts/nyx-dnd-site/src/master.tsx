@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, BookOpen, CalendarDays, LogOut, Pencil, Plus, RefreshCw, Save, Trash2, X } from '@/components/flaticon-icons';
 import { Link, Route, Switch, useLocation } from 'wouter';
+import { useDialogFocus } from '@/hooks/use-dialog-focus';
 
 type MasterEvent = {
   id: string; title: string; event_date: string; start_time: string; game_type: 'campaign' | 'module' | 'oneshot'; status: string; seats: number | null;
@@ -12,7 +13,7 @@ type FormState = Omit<MasterEvent, 'id' | 'archived' | 'revision'>;
 type CatalogItem = {
   id: string; systemKey: string; title: string; description: string; imageUrl: string; age: string;
   format: string; price: string; gameType: 'campaign' | 'oneshot'; status: string; sortOrder: number;
-  published: boolean; revision: number; updatedAt: string;
+  publicationStatus: 'draft' | 'published' | 'archived'; revision: number; updatedAt: string;
 };
 type CatalogForm = Omit<CatalogItem, 'id' | 'revision' | 'updatedAt'>;
 type Session = { user: { id: string; login: string; role: string }; csrfToken?: string };
@@ -26,7 +27,7 @@ function masterEndOfMonth(value: string) { const date = masterDate(masterStartOf
 function masterMonthGridEnd(value: string) { return masterAddDays(masterStartOfWeek(masterEndOfMonth(value)), 6); }
 function masterOccursOn(event: MasterEvent, date: string) { if (date < event.event_date || event.archived) return false; if (event.recurrence === 'none') return date === event.event_date; if (event.recurrence_until && date > event.recurrence_until) return false; const days = Math.round((masterDate(date).getTime() - masterDate(event.event_date).getTime()) / 86400000); if (event.recurrence === 'daily') return true; if (event.recurrence === 'weekly') return days % 7 === 0; if (event.recurrence === 'biweekly') return days % 14 === 0; if (event.recurrence === 'monthly') return masterDate(date).getUTCDate() === masterDate(event.event_date).getUTCDate(); return false; }
 const emptyForm: FormState = { title: '', event_date: '', start_time: '', game_type: 'oneshot', status: 'available', seats: null, description: '', system: '', format: 'online', location: '', duration: '', price: '', experience: '', age: '18+', player_prep: '', recurrence: 'none', recurrence_until: null, catalog_item_id: null, tags: [], miniCapacity: null };
-const emptyCatalogForm: CatalogForm = { systemKey: 'dnd', title: '', description: '', imageUrl: '', age: '18+', format: 'online', price: '', gameType: 'oneshot', status: '', sortOrder: 0, published: true };
+const emptyCatalogForm: CatalogForm = { systemKey: 'dnd', title: '', description: '', imageUrl: '', age: '18+', format: 'online', price: '', gameType: 'oneshot', status: '', sortOrder: 0, publicationStatus: 'published' };
 const catalogSystemLabels: Record<string, string> = { dnd: 'Dungeons & Dragons', vampires: 'Вампиры: Маскарад', daggerheart: 'Daggerheart', cyberpunk: 'Cyberpunk 2020', cthulhu: 'Зов Ктулху' };
 function catalogSystemLabel(value: string) { return catalogSystemLabels[value] ?? value; }
 function catalogFormatLabel(value: string) {
@@ -113,7 +114,9 @@ function useEditorDismiss(onCancel: () => void) {
 }
 
 function MasterOverlay({ onDismiss, children }: { onDismiss: () => void; children: React.ReactNode }) {
-  return <div className="master-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onDismiss(); }}>{children}</div>;
+  const overlayRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(overlayRef);
+  return <div ref={overlayRef} className="master-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onDismiss(); }}>{children}</div>;
 }
 
 function EventEditor({ event, session, onSaved, onCancel }: { event: MasterEvent | null; session: Session; onSaved: () => void; onCancel: () => void }) {
@@ -182,9 +185,9 @@ function EventEditor({ event, session, onSaved, onCancel }: { event: MasterEvent
     }
   }
 
-  return <form className="master-editor" role="dialog" aria-modal="true" onSubmit={submit}>
+  return <form className="master-editor" role="dialog" aria-modal="true" aria-labelledby="event-editor-title" onSubmit={submit}>
     <div className="master-editor-head">
-      <div><span className="eyebrow">{event ? 'редактирование' : 'новая запись'}</span><h2>{event ? 'Изменить игру' : 'Добавить игру'}</h2></div>
+      <div><span className="eyebrow">{event ? 'редактирование' : 'новая запись'}</span><h2 id="event-editor-title">{event ? 'Изменить игру' : 'Добавить игру'}</h2></div>
       <button type="button" className="master-icon-button" onClick={onCancel} aria-label="Закрыть"><X size={15} /></button>
     </div>
     <div className="master-fields">
@@ -225,7 +228,7 @@ function CatalogEditor({ item, session, onSaved, onCancel }: { item: CatalogItem
     gameType: item.gameType,
     status: item.status,
     sortOrder: item.sortOrder,
-    published: item.published,
+    publicationStatus: item.publicationStatus,
   } : emptyCatalogForm);
   const [error, setError] = useState('');
   const set = <K extends keyof CatalogForm>(key: K, value: CatalogForm[K]) => setForm((current) => ({ ...current, [key]: value }));
@@ -238,7 +241,7 @@ function CatalogEditor({ item, session, onSaved, onCancel }: { item: CatalogItem
       await api(item ? `/api/master/catalog/${item.id}` : '/api/master/catalog', {
         method: item ? 'PATCH' : 'POST',
         headers: { 'X-CSRF-Token': session.csrfToken ?? '' },
-        body: JSON.stringify(item ? { ...form, type: form.gameType, revision: item.revision } : { ...form, type: form.gameType }),
+        body: JSON.stringify(item ? { ...form, revision: item.revision } : form),
       });
       onSaved();
     } catch (reason) {
@@ -246,8 +249,8 @@ function CatalogEditor({ item, session, onSaved, onCancel }: { item: CatalogItem
     }
   }
 
-  return <form className="master-editor" role="dialog" aria-modal="true" onSubmit={submit}>
-    <div className="master-editor-head"><div><span className="eyebrow">{item ? 'редактирование' : 'новая запись'}</span><h2>{item ? 'Изменить игру' : 'Добавить игру'}</h2></div><button type="button" className="master-icon-button" onClick={onCancel} aria-label="Закрыть">×</button></div>
+  return <form className="master-editor" role="dialog" aria-modal="true" aria-labelledby="catalog-editor-title" onSubmit={submit}>
+    <div className="master-editor-head"><div><span className="eyebrow">{item ? 'редактирование' : 'новая запись'}</span><h2 id="catalog-editor-title">{item ? 'Изменить игру' : 'Добавить игру'}</h2></div><button type="button" className="master-icon-button" onClick={onCancel} aria-label="Закрыть">×</button></div>
     <div className="master-fields">
       <label>Система<select value={form.systemKey} onChange={(event) => set('systemKey', event.target.value)} required><option value="dnd">Dungeons &amp; Dragons</option><option value="vampires">Вампиры: Маскарад</option><option value="daggerheart">Daggerheart</option><option value="cyberpunk">Cyberpunk 2020</option><option value="cthulhu">Зов Ктулху</option></select></label>
       <label>Название<input value={form.title} onChange={(event) => set('title', event.target.value)} required /></label>
@@ -255,11 +258,11 @@ function CatalogEditor({ item, session, onSaved, onCancel }: { item: CatalogItem
       <label>Возраст<input value={form.age} onChange={(event) => set('age', event.target.value)} placeholder="18+" /></label>
       <label>Формат<select value={form.format} onChange={(event) => set('format', event.target.value)}><option value="online">Онлайн</option><option value="offline">Очно</option><option value="online/offline">Онлайн и очно</option></select></label>
       <label>Цена<input value={form.price} onChange={(event) => set('price', event.target.value)} placeholder="1500 ₽" /></label>
-      <label>Статус<input value={form.status} onChange={(event) => set('status', event.target.value)} placeholder="Подходит новичкам" /></label>
+      <label>Метка<input value={form.status} onChange={(event) => set('status', event.target.value)} maxLength={80} placeholder="Подходит новичкам" /></label>
       <label>Порядок<input type="number" min="0" value={form.sortOrder} onChange={(event) => set('sortOrder', Number(event.target.value) || 0)} /></label>
-      <label className="full">Ссылка на обложку<input type="text" inputMode="url" value={form.imageUrl} onChange={(event) => set('imageUrl', event.target.value)} placeholder="https://… или /assets/…" /></label>
+      <label className="full">Ссылка на обложку<input type="text" inputMode="url" value={form.imageUrl} onChange={(event) => set('imageUrl', event.target.value)} placeholder="/assets/… или HTTPS с vkuserphoto.ru" /></label>
+      <label>Публикация<select value={form.publicationStatus} onChange={(event) => set('publicationStatus', event.target.value as CatalogForm['publicationStatus'])}><option value="draft">Черновик</option><option value="published">Опубликовано</option><option value="archived">Архив</option></select></label>
       <label className="full">Описание<textarea value={form.description} onChange={(event) => set('description', event.target.value)} rows={5} /></label>
-      <label className="full"><input type="checkbox" checked={form.published} onChange={(event) => set('published', event.target.checked)} /> Показывать игру в публичном каталоге</label>
     </div>
     {error && <div className="master-error" role="alert">{error}</div>}
     <div className="master-editor-actions"><button type="button" className="button button-ghost" onClick={onCancel}>Отменить</button><button className="button button-primary"><Save size={15} /> Сохранить</button></div>
@@ -290,7 +293,7 @@ function CatalogPage({ session }: { session: Session }) {
       {error && <div className="master-error" role="alert">{error}</div>}
       <div className="master-events">
         {items.map((item) => <article className="master-event-card" key={item.id}>
-          <div className="master-event-date"><strong>{item.gameType === 'campaign' ? 'К' : 'В'}</strong><span>{item.published ? 'опубликовано' : 'скрыто'}</span></div>
+          <div className="master-event-date"><strong>{item.gameType === 'campaign' ? 'К' : 'В'}</strong><span>{item.publicationStatus === 'published' ? 'опубликовано' : item.publicationStatus === 'draft' ? 'черновик' : 'архив'}</span></div>
           <div className="master-event-info"><span className="master-status">{catalogSystemLabel(item.systemKey)} · {item.age || 'возраст не указан'}</span><h2>{item.title || 'Без названия'}</h2><p>{catalogFormatLabel(item.format)} · {item.price || 'Цена не указана'}{item.description ? ` · ${item.description}` : ''}</p></div>
           <div className="master-event-actions"><button type="button" onClick={() => setEditing(item)} aria-label={`Редактировать ${item.title}`}><Pencil size={15} /></button><button type="button" onClick={() => remove(item)} aria-label={`Удалить ${item.title}`}><Trash2 size={15} /></button></div>
         </article>)}
@@ -327,7 +330,7 @@ function ApplicationsPage({ session }: { session: Session }) {
       setParticipants(participantData.participants);
     }).catch(() => undefined);
   }, []);
-  return <MasterLayout session={session}><section className="master-content"><div className="master-heading"><div><span className="eyebrow">входящие</span><h1>Заявки<br /><em>игроков</em></h1></div></div><div className="master-applications"><div className="master-subheading"><span className="eyebrow">из мини‑аппа</span><h2>Записи на игры</h2></div>{participants.map((item) => <article className="master-application" key={`${item.event_id}:${item.occurrence_date}:${item.telegram_user_id}`}><div><span>{item.occurrence_date} · {item.start_time || 'время уточняется'}</span><h2>{item.title || 'Игра'}</h2><strong>{[item.first_name, item.last_name].filter(Boolean).join(' ') || 'Игрок'}{item.username ? ` · @${item.username}` : ''}</strong></div><p>{item.status === 'waitlist' ? 'Лист ожидания' : 'Подтверждено'}</p></article>)}{!participants.length && <div className="master-empty">Записей из мини‑аппа пока нет.</div>}</div><div className="master-applications"><div className="master-subheading"><span className="eyebrow">веб‑форма</span><h2>Заявки игроков</h2></div>{applications.map((item) => <article className="master-application" key={item.id}><div><span>{new Date(item.created_at).toLocaleString('ru-RU')}</span><h2>{item.name}</h2><a href={`https://t.me/${String(item.contact).replace(/^@/, '')}`} target="_blank" rel="noreferrer">{item.contact}</a></div><p>{item.wishes || item.system || 'Без дополнительных пожеланий'}</p><strong>{item.players} игроков</strong></article>)}{!applications.length && <div className="master-empty">Новых заявок пока нет.</div>}</div></section></MasterLayout>;
+  return <MasterLayout session={session}><section className="master-content"><div className="master-heading"><div><span className="eyebrow">входящие</span><h1>Заявки<br /><em>игроков</em></h1></div></div><div className="master-applications"><div className="master-subheading"><span className="eyebrow">из мини‑аппа</span><h2>Записи на игры</h2></div>{participants.map((item) => <article className="master-application" key={`${item.event_id}:${item.occurrence_date}:${item.telegram_user_id}`}><div><span>{item.occurrence_date} · {item.start_time || 'время уточняется'}</span><h2>{item.title || 'Игра'}</h2><strong>{[item.first_name, item.last_name].filter(Boolean).join(' ') || 'Игрок'}{item.username ? ` · @${item.username}` : ''}</strong></div><p>{item.status === 'waitlist' ? 'Лист ожидания' : 'Подтверждено'}</p></article>)}{!participants.length && <div className="master-empty">Записей из мини‑аппа пока нет.</div>}</div><div className="master-applications"><div className="master-subheading"><span className="eyebrow">веб‑форма</span><h2>Заявки игроков</h2></div>{applications.map((item) => <article className="master-application" key={item.id}><div><span>{new Date(item.created_at).toLocaleString('ru-RU')}</span><h2>{item.name}</h2><a href={`https://t.me/${String(item.contact).replace(/^@/, '')}`} target="_blank" rel="noreferrer">{item.contact}</a></div><p>{item.wishes || item.system || 'Без дополнительных пожеланий'}</p>{[item.utm_source, item.utm_medium, item.utm_campaign].some(Boolean) && <small>Источник: {[item.utm_source, item.utm_medium, item.utm_campaign].filter(Boolean).join(' · ')}</small>}<strong>{item.players} игроков</strong></article>)}{!applications.length && <div className="master-empty">Новых заявок пока нет.</div>}</div></section></MasterLayout>;
 }
 
 export default function MasterRoutes() {

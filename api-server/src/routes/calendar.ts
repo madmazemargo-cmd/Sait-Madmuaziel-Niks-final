@@ -1,11 +1,12 @@
 import { Router, type IRouter } from "express";
 import { GetCalendarResponse } from "@workspace/api-zod";
+import { apiEndpoint } from "../config";
 
 const router: IRouter = Router();
 
 const calendarSourceUrl =
   process.env.CALENDAR_SOURCE_URL ??
-  "https://dndmaster.dndmaster.workers.dev/api/calendar";
+  apiEndpoint("calendar");
 const sourceTimeoutMs = 8_000;
 
 router.get("/calendar", async (_req, res): Promise<void> => {

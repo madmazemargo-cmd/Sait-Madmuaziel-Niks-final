@@ -31,8 +31,8 @@ export const GetCalendarResponse = zod.object({
   "title": zod.string(),
   "eventDate": zod.string().regex(getCalendarResponseEventsItemEventDateRegExp),
   "startTime": zod.string(),
-  "gameType": zod.string().optional(),
-  "catalogItemId": zod.string().nullable().optional(),
+  "gameType": zod.enum(['campaign', 'module', 'oneshot']).optional(),
+  "catalogItemId": zod.string().nullish(),
   "status": zod.string(),
   "seats": zod.number().int().nullable(),
   "description": zod.string(),
@@ -86,6 +86,16 @@ export const GetApplicationSelectionResponse = zod.object({
  */
 export const submitApplicationBodyPlayersMax = 20;
 
+export const submitApplicationBodyUtmSourceMax = 100;
+
+export const submitApplicationBodyUtmMediumMax = 100;
+
+export const submitApplicationBodyUtmCampaignMax = 100;
+
+export const submitApplicationBodyUtmContentMax = 100;
+
+export const submitApplicationBodyUtmTermMax = 100;
+
 
 
 export const SubmitApplicationBody = zod.object({
@@ -106,7 +116,12 @@ export const SubmitApplicationBody = zod.object({
   "consent": zod.boolean(),
   "eventId": zod.string().nullish(),
   "occurrenceDate": zod.string().nullish(),
-  "eventRevision": zod.string().nullish()
+  "eventRevision": zod.string().nullish(),
+  "utmSource": zod.string().max(submitApplicationBodyUtmSourceMax).optional(),
+  "utmMedium": zod.string().max(submitApplicationBodyUtmMediumMax).optional(),
+  "utmCampaign": zod.string().max(submitApplicationBodyUtmCampaignMax).optional(),
+  "utmContent": zod.string().max(submitApplicationBodyUtmContentMax).optional(),
+  "utmTerm": zod.string().max(submitApplicationBodyUtmTermMax).optional()
 })
 
 export const SubmitApplicationResponse = zod.object({

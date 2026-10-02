@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type AnchorHTMLAttributes, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type AnchorHTMLAttributes, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { createPortal } from 'react-dom';
 import { ArrowUpRight, Check, Menu, X } from '@/components/flaticon-icons';
@@ -14,6 +14,8 @@ import {
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { useDialogFocus } from '@/hooks/use-dialog-focus';
+import { captureAttribution, getAttribution, initializeAnalytics, trackEvent } from '@/lib/analytics';
 import NotFound from '@/pages/not-found';
 import MasterRoutes from '@/master';
 import MiniApp from '@/mini';
@@ -158,10 +160,10 @@ function formatPlace(event: CalendarEvent) {
 
 function eventImage(event: CalendarEvent) {
   const source = `${event.system} ${event.title}`.toLowerCase();
-  if (source.includes('vampire') || source.includes('вампир')) return '/assets/system-vampires.png';
-  if (source.includes('dagger')) return '/assets/system-daggerheart.png';
-  if (source.includes('cyber')) return '/assets/system-cyberpunk.png';
-  return '/assets/system-dnd.png';
+  if (source.includes('vampire') || source.includes('вампир')) return '/assets/system-vampires.webp';
+  if (source.includes('dagger')) return '/assets/system-daggerheart.webp';
+  if (source.includes('cyber')) return '/assets/system-cyberpunk.webp';
+  return '/assets/system-dnd.webp';
 }
 
 function eventOccursOn(event: CalendarEvent, date: string) {
@@ -283,7 +285,7 @@ function HomeSectionLink({ sectionId, onClick, children, ...props }: HomeSection
     });
   }
 
-  return <a {...props} href={target} onClick={handleClick}>{children}</a>;
+  return <a {...props} href={target} onClick={(event) => { if (target.startsWith('/anketa')) trackEvent('application_open'); handleClick(event); }}>{children}</a>;
 }
 
 function Header() {
@@ -356,11 +358,11 @@ type CatalogSystem = {
 };
 
 const catalogGroups: CatalogSystem[] = [
-  { number: '01', slug: 'dnd', title: 'Dungeons & Dragons', subtitle: 'D&D 5e', status: 'Ваншоты и кампании', artwork: '/assets/system-dnd.png' },
-  { number: '02', slug: 'vampires', title: 'Вампиры: Маскарад', subtitle: 'Vampire: The Masquerade', status: 'Готический хоррор', artwork: '/assets/system-vampires.png' },
-  { number: '03', slug: 'daggerheart', title: 'Daggerheart', subtitle: 'Героическое фэнтези', status: 'Игры и кампании', artwork: '/assets/system-daggerheart.png' },
-  { number: '04', slug: 'cyberpunk', title: 'Cyberpunk 2020', subtitle: 'Тёмное будущее', status: 'Игры и кампании', artwork: '/assets/system-cyberpunk.png' },
-  { number: '05', slug: 'cthulhu', title: 'Зов Ктулху', subtitle: 'Call of Cthulhu', status: 'В разработке', artwork: '/assets/system-cthulhu.png' },
+  { number: '01', slug: 'dnd', title: 'Dungeons & Dragons', subtitle: 'D&D 5e', status: 'Ваншоты и кампании', artwork: '/assets/system-dnd.webp' },
+  { number: '02', slug: 'vampires', title: 'Вампиры: Маскарад', subtitle: 'Vampire: The Masquerade', status: 'Готический хоррор', artwork: '/assets/system-vampires.webp' },
+  { number: '03', slug: 'daggerheart', title: 'Daggerheart', subtitle: 'Героическое фэнтези', status: 'Игры и кампании', artwork: '/assets/system-daggerheart.webp' },
+  { number: '04', slug: 'cyberpunk', title: 'Cyberpunk 2020', subtitle: 'Тёмное будущее', status: 'Игры и кампании', artwork: '/assets/system-cyberpunk.webp' },
+  { number: '05', slug: 'cthulhu', title: 'Зов Ктулху', subtitle: 'Call of Cthulhu', status: 'В разработке', artwork: '/assets/system-cthulhu.webp' },
 ];
 
 type CatalogItem = {
@@ -540,7 +542,7 @@ function CatalogBrowser({ selectedSystem }: { selectedSystem?: string }) {
       {isLoading && <div className="calendar-state" role="status">Загружаем игры…</div>}
       {isError && <div className="calendar-state" role="alert"><h2>Каталог временно недоступен</h2><p>Не удалось получить актуальные карточки.</p><button className="button button-primary" onClick={() => refetch()}>Повторить</button></div>}
       {!isLoading && !isError && selectedSystem === 'cthulhu' && <div className="catalog-development-state">
-        <img src="/assets/system-cthulhu.png" alt="Штормовое море и маяк" />
+        <img src="/assets/system-cthulhu.webp" alt="Штормовое море и маяк" loading="lazy" decoding="async" />
         <div><span className="catalog-kicker">СИСТЕМА 05</span><h2>Зов Ктулху пока в разработке</h2><p>Новые игры появятся здесь, когда система будет готова к запуску.</p><Link href="/anketa" className="button button-ghost">Оставить пожелание</Link></div>
       </div>}
       {!isLoading && !isError && selectedSystem !== 'cthulhu' && (items.length ? selectedSystem ? <div className="catalog-game-grid">
@@ -576,7 +578,7 @@ function Home() {
           <div className="hero-art reveal delay-1">
             <span className="orb one">d20<br />roll</span>
             <span className="orb two">+1</span>
-            <img className="hero-character" src="/assets/nyx-cutout.png" alt="Мадмуазель Никс за игровым столом" fetchPriority="high" decoding="async" data-testid="img-nyx-hero" />
+            <img className="hero-character" src="/assets/nyx-cutout.webp" alt="Мадмуазель Никс за игровым столом" fetchPriority="high" decoding="async" data-testid="img-nyx-hero" />
           </div>
           <span className="scroll-tag">листай, если готова</span>
         </section>
@@ -764,8 +766,10 @@ function MonthGame({ game, onSelect }: { game: Game; onSelect: (game: Game) => v
 }
 
 function CalendarMonthOverflowDialog({ date, games, onSelect, onClose }: { date: string; games: Game[]; onSelect: (game: Game) => void; onClose: () => void }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  useDialogFocus(dialogRef);
   return <div className="calendar-detail-backdrop calendar-more-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className="calendar-more-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-more-title">
+    <section ref={dialogRef} className="calendar-more-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-more-title">
       <header><div><span className="catalog-kicker">другие события</span><h2 id="calendar-more-title">{formatDate(date)}</h2></div><button type="button" className="calendar-detail-close" onClick={onClose} aria-label="Закрыть"><X size={18} /></button></header>
       <div className="calendar-more-list">{games.map((game) => <button type="button" key={game.id} onClick={() => onSelect(game)}><time>{game.time}</time><span><strong>{game.title}</strong><small>{gameTypeLabel(game.gameType)} · {availabilityLabel(game)}</small></span><ArrowUpRight size={15} /></button>)}</div>
     </section>
@@ -790,6 +794,7 @@ function WeeklyGame({ game, onSelect }: { game: Game; onSelect: (game: Game) => 
 }
 
 function GameDetailsDialog({ game, catalogItem, onClose }: { game: Game; catalogItem?: CatalogItem; onClose: () => void }) {
+  const dialogRef = useRef<HTMLElement>(null);
   const eventDescription = game.description.startsWith('Подробности игры обсудим') ? '' : game.description;
   const catalogDescription = catalogItem?.description.trim() ?? '';
   const showEventDescription = eventDescription && eventDescription.trim() !== catalogDescription;
@@ -808,14 +813,15 @@ function GameDetailsDialog({ game, catalogItem, onClose }: { game: Game; catalog
     ['Длительность', game.duration],
   ];
   const isPast = game.dateISO < todayInMoscow();
+  useDialogFocus(dialogRef);
   const applicationUrl = game.status === 'open_slot'
     ? '/anketa'
     : '/anketa?event=' + encodeURIComponent(game.eventId) + '&date=' + encodeURIComponent(game.dateISO);
 
   return <div className="calendar-detail-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className="calendar-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-detail-title">
+    <section ref={dialogRef} className="calendar-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-detail-title">
       <div className="calendar-detail-cover">
-        <img src={catalogItem?.imageUrl || game.image} alt={catalogItem ? 'Обложка игры «' + catalogItem.title + '»' : 'Иллюстрация игры «' + game.title + '»'} />
+        <img src={catalogItem?.imageUrl || game.image} alt={catalogItem ? 'Обложка игры «' + catalogItem.title + '»' : 'Иллюстрация игры «' + game.title + '»'} loading="lazy" decoding="async" />
         <button type="button" className="calendar-detail-close" onClick={onClose} aria-label="Закрыть"><X size={18} /></button>
         <span>{gameTypeLabel(game.gameType)} · {availabilityLabel(game)}</span>
       </div>
@@ -878,6 +884,7 @@ function ApplicationPage() {
   const [step, setStep] = useState<1 | 2>(1);
   const [consent, setConsent] = useState(false);
   const [submissionId] = useState(() => crypto.randomUUID());
+  useEffect(() => { trackEvent('application_open'); }, []);
   const [form, setForm] = useState({
     name: '',
     contact: '',
@@ -979,6 +986,7 @@ function ApplicationPage() {
       setStepError('Напишите, когда вам удобно играть.');
       return;
     }
+    trackEvent('application_step_2');
     setStep(2);
   }
 
@@ -1024,6 +1032,7 @@ function ApplicationPage() {
       eventId: selectedGame?.id ?? null,
       occurrenceDate: selectedGame?.date ?? null,
       eventRevision: selectedGame?.revision ?? null,
+      ...getAttribution(),
     };
 
     try {
@@ -1032,6 +1041,7 @@ function ApplicationPage() {
         setSubmitError(response.error || 'Мастер не смог принять заявку. Попробуйте ещё раз.');
         return;
       }
+      trackEvent('application_submitted');
       setSent(true);
     } catch (error) {
       setSubmitError(getErrorMessage(error));
@@ -1082,6 +1092,7 @@ function LegalPage({ kind }: { kind: LegalPageKind }) {
         ['Зачем они нужны', 'Данные используются для связи, подбора формата и организации участия в игре. Мы не продаём анкеты и не используем их для рассылок без отдельного согласия.'],
         ['Срок хранения и удаление', 'Заявки хранятся столько, сколько нужно для обработки обращения и истории договорённостей. Для исправления или удаления данных напишите в Telegram: @mad_maze_elle.'],
         ['Передача третьим лицам', 'Контакт и содержание заявки могут обрабатываться сервисами, необходимыми для работы сайта и связи с мастером, включая Cloudflare, базу данных и Telegram.'],
+        ['Аналитика и источник обращения', 'Если на сайте включена аналитика, агрегированные события посещения обрабатываются Plausible без cookie. При отправке анкеты значения UTM-меток из ссылки сохраняются вместе с заявкой, чтобы понять, откуда пришло обращение.'],
       ],
     },
     terms: {
@@ -1187,6 +1198,11 @@ function Router() {
 }
 
 function App() {
+  useEffect(() => {
+    captureAttribution();
+    initializeAnalytics();
+  }, []);
+
   return <QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><Toaster /></TooltipProvider></QueryClientProvider>;
 }
 

@@ -1,4 +1,3 @@
-const DEFAULT_API_ORIGIN = 'https://madmuazelle-niks-api.dndmaster.workers.dev';
 const ROUTES = new Map([
   ['healthz', new Set(['GET'])],
   ['calendar', new Set(['GET'])],
@@ -16,6 +15,14 @@ const ROUTES = new Map([
   ['auth/logout', new Set(['POST'])],
 ]);
 const MAX_BODY_BYTES = 32 * 1024;
+const API_SECURITY_HEADERS = {
+  'Cache-Control': 'no-store',
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'X-Frame-Options': 'DENY',
+  'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+};
 
 function masterMethods(endpoint) {
   if (endpoint === 'master/catalog' || endpoint === 'master/events') return new Set(['GET', 'POST']);
@@ -25,7 +32,7 @@ function masterMethods(endpoint) {
 }
  
 function jsonError(message, status, extraHeaders = {}) {
-  return Response.json({ error: message }, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...extraHeaders } });
+  return Response.json({ error: message }, { status, headers: { ...API_SECURITY_HEADERS, ...extraHeaders } });
 }
  
 export async function onRequest(context) {
@@ -49,7 +56,18 @@ export async function onRequest(context) {
  
 async function proxy(context, endpoint) {
   const incomingUrl = new URL(context.request.url);
-  const apiOrigin = context.env?.API_ORIGIN || DEFAULT_API_ORIGIN;
+  let apiOrigin;
+  try {
+    const configured = context.env?.API_ORIGIN;
+    if (!configured) return jsonError('API origin is not configured.', 503);
+    const parsed = new URL(configured);
+    if (parsed.protocol !== 'https:' || parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password) {
+      return jsonError('API origin is invalid.', 503);
+    }
+    apiOrigin = parsed.origin;
+  } catch {
+    return jsonError('API origin is invalid.', 503);
+  }
   const upstreamUrl = new URL(`/api/${endpoint}`, apiOrigin);
   upstreamUrl.search = incomingUrl.search;
   const headers = new Headers({ Accept: 'application/json' });
@@ -61,7 +79,7 @@ async function proxy(context, endpoint) {
     const upstream = await fetch(upstreamUrl, { method: context.request.method, headers, body: ['GET', 'HEAD'].includes(context.request.method) ? undefined : context.request.body, redirect: 'manual' });
     const type = upstream.headers.get('Content-Type') ?? '';
     if (!type.toLowerCase().includes('application/json') && upstream.status !== 204) return jsonError('Источник вернул неверный ответ.', 502);
-    const responseHeaders = new Headers({ 'Content-Type': type || 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'X-Frame-Options': 'DENY', 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'", 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains' });
+    const responseHeaders = new Headers({ ...API_SECURITY_HEADERS, 'Content-Type': type || 'application/json; charset=utf-8' });
     for (const name of ['Set-Cookie', 'Retry-After', 'Allow']) { const value = upstream.headers.get(name); if (value) responseHeaders.set(name, value); }
     return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
   } catch { return jsonError('Не удалось связаться с API.', 502); }

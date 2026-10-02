@@ -10,6 +10,7 @@ export * from './applicationInput';
 export * from './applicationResponse';
 export * from './applicationSelectionResponse';
 export * from './calendarEvent';
+export * from './calendarEventGameType';
 export * from './calendarResponse';
 export * from './errorResponse';
 export * from './gameSelection';

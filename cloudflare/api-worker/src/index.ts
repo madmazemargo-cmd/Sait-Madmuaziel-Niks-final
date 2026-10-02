@@ -14,8 +14,11 @@ export interface Env {
   SESSION_PEPPER?: string;
   RATE_LIMITER?: DurableObjectNamespace;
   TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_APPLICATIONS_CHAT_ID?: string;
+  APPLICATION_NOTIFY_CHAT_ID?: string;
   TELEGRAM_WEBHOOK_SECRET?: string;
   MINI_APP_URL?: string;
+  PUBLIC_SITE_ORIGIN?: string;
   GAME_TIMEZONE?: string;
 }
 
@@ -37,6 +40,35 @@ const text = (value: unknown, max = 4000) => typeof value === 'string' ? value.t
 const validDate = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 const nowIso = () => new Date().toISOString();
 const id = () => crypto.randomUUID();
+
+async function notifyWebApplication(env: Env, gameTitle: string, occurrenceDate: string | null) {
+  const chatId = env.TELEGRAM_APPLICATIONS_CHAT_ID ?? env.APPLICATION_NOTIFY_CHAT_ID;
+  if (!env.TELEGRAM_BOT_TOKEN || !chatId) return;
+
+  const siteOrigin = env.PUBLIC_SITE_ORIGIN ?? 'https://sait-madmuaziel-niks-final.pages.dev';
+  const adminUrl = new URL('/master/applications', siteOrigin).toString();
+  const safeTitle = gameTitle.replace(/[\r\n\t]+/g, ' ').slice(0, 160) || 'Подбор игры';
+  const details = occurrenceDate ? `\nДата: ${occurrenceDate}` : '';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: `Новая веб-заявка\nИгра: ${safeTitle}${details}\nОткройте кабинет мастера: ${adminUrl}`,
+        disable_web_page_preview: true,
+      }),
+      signal: controller.signal,
+    });
+    const result = await response.json() as { ok?: boolean };
+    if (!response.ok || result.ok !== true) throw new Error(`Telegram notification failed (${response.status})`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 function nullableNumber(value: unknown) {
   if (value === null || value === undefined || value === '') return null;
   const number = Number(value);
@@ -265,6 +297,10 @@ async function masterEvents(env: Env) {
 }
 
 type CatalogType = 'campaign' | 'oneshot';
+type CatalogPublicationStatus = 'draft' | 'published' | 'archived';
+const catalogSystemKeys = new Set(['dnd', 'vampires', 'daggerheart', 'cyberpunk', 'cthulhu']);
+const catalogFormats = new Set(['online', 'offline', 'online/offline']);
+const catalogPublicationStatuses = new Set<CatalogPublicationStatus>(['draft', 'published', 'archived']);
 
 function catalogSystemKey(value: unknown) {
   const source = text(value, 100).toLowerCase().replace(/ё/g, 'е');
@@ -300,13 +336,20 @@ function catalogBoolean(value: unknown, fallback: boolean) {
 function catalogImage(value: unknown) {
   const source = text(value, 1000);
   if (!source) return '';
-  if (source.startsWith('/') && !source.startsWith('//')) return source;
+  if (/^\/assets\/[A-Za-z0-9][A-Za-z0-9._-]*\.(?:webp|png|jpe?g)$/i.test(source)) return source;
   try {
     const parsed = new URL(source);
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? source : '';
+    const allowedHost = parsed.hostname === 'vkuserphoto.ru' || parsed.hostname.endsWith('.vkuserphoto.ru');
+    return parsed.protocol === 'https:' && allowedHost && !parsed.username && !parsed.password && !parsed.port ? parsed.href : null;
   } catch {
-    return '';
+    return null;
   }
+}
+
+function catalogPublicationStatus(value: unknown): CatalogPublicationStatus | null {
+  return typeof value === 'string' && catalogPublicationStatuses.has(value as CatalogPublicationStatus)
+    ? value as CatalogPublicationStatus
+    : null;
 }
 
 function catalogSortOrder(value: unknown, fallback = 0) {
@@ -315,6 +358,8 @@ function catalogSortOrder(value: unknown, fallback = 0) {
 }
 
 function toCatalogItem(row: Row) {
+  const publicationStatus = catalogPublicationStatus(row.publication_status)
+    ?? (catalogBoolean(row.published, false) ? 'published' : 'draft');
   return {
     id: String(row.id),
     systemKey: catalogSystemKey(row.system_key) ?? String(row.system_key ?? ''),
@@ -327,14 +372,17 @@ function toCatalogItem(row: Row) {
     gameType: catalogType(row.game_type) ?? 'oneshot',
     status: String(row.status ?? ''),
     sortOrder: Number(row.sort_order ?? 0),
-    published: catalogBoolean(row.published, false),
+    published: publicationStatus === 'published',
+    publicationStatus,
     revision: Number(row.revision ?? 1),
     updatedAt: String(row.updated_at ?? ''),
   };
 }
 
 async function publicCatalog(env: Env) {
-  const { results } = await env.DB.prepare('SELECT * FROM catalog_items WHERE published = 1 ORDER BY sort_order, updated_at DESC, title COLLATE NOCASE').all();
+  const { results } = await env.DB.prepare(`SELECT * FROM catalog_items
+    WHERE publication_status = 'published' AND published = 1
+    ORDER BY sort_order, updated_at DESC, title COLLATE NOCASE`).all();
   return { items: results.map((row) => toCatalogItem(row as Row)) };
 }
 
@@ -343,23 +391,44 @@ async function masterCatalog(env: Env) {
   return { items: results.map((row) => toCatalogItem(row as Row)) };
 }
 
-function normalizeCatalogInput(body: Row, current?: Row) {
-  const systemKey = catalogSystemKey(firstField(body, ['systemKey', 'system_key', 'system'], current?.system_key ?? ''));
-  const title = text(firstField(body, ['title'], current?.title ?? ''), 200);
-  const description = text(firstField(body, ['description'], current?.description ?? ''), 4000);
-  const imageUrl = catalogImage(firstField(body, ['imageUrl', 'image_url', 'image'], current?.image_url ?? ''));
-  const age = text(firstField(body, ['age'], current?.age ?? ''), 100);
-  const format = text(firstField(body, ['format'], current?.format ?? ''), 100);
-  const price = text(firstField(body, ['price'], current?.price ?? ''), 100);
-  const gameType = catalogType(firstField(body, ['gameType', 'type', 'game_type'], current?.game_type ?? 'oneshot'));
-  const status = text(firstField(body, ['status'], current?.status ?? ''), 200);
-  const sortOrder = catalogSortOrder(firstField(body, ['sortOrder', 'sort_order'], current?.sort_order ?? 0), Number(current?.sort_order ?? 0));
-  const published = catalogBoolean(firstField(body, ['published'], current?.published ?? 1), Boolean(current?.published ?? 1));
+export function normalizeCatalogInput(body: Row, current?: Row) {
+  const allowedFields = new Set(['systemKey', 'title', 'description', 'imageUrl', 'age', 'format', 'price', 'gameType', 'status', 'sortOrder', 'publicationStatus', 'revision']);
+  if (Object.keys(body).some((key) => !allowedFields.has(key))) return { error: 'В каталоге есть неизвестные поля. Обновите страницу и повторите попытку.' } as const;
 
-  if (!systemKey) return { error: 'Выберите поддерживаемую систему игры.' } as const;
-  if (!title) return { error: 'Укажите название игры.' } as const;
+  const systemKey = text(body.systemKey, 100).toLowerCase();
+  const titleValue = body.title;
+  const title = text(titleValue, 200);
+  const descriptionValue = body.description === undefined ? '' : body.description;
+  const description = text(descriptionValue, 4000);
+  const imageValue = body.imageUrl === undefined ? '' : body.imageUrl;
+  const imageUrl = catalogImage(imageValue);
+  const ageValue = body.age === undefined ? '' : body.age;
+  const age = text(ageValue, 100);
+  const formatValue = body.format;
+  const format = text(formatValue, 100);
+  const priceValue = body.price === undefined ? '' : body.price;
+  const price = text(priceValue, 100);
+  const gameType = body.gameType === 'campaign' || body.gameType === 'oneshot' ? body.gameType : null;
+  const statusValue = body.status === undefined ? '' : body.status;
+  const status = text(statusValue, 80);
+  const sortOrder = catalogSortOrder(body.sortOrder, Number(current?.sort_order ?? 0));
+  const publicationStatus = catalogPublicationStatus(body.publicationStatus);
+
+  if (Object.keys(body).some((key) => key !== 'revision' && typeof body[key] !== 'string' && key !== 'sortOrder')) return { error: 'Поля каталога заполнены неверно.' } as const;
+  if (typeof titleValue !== 'string' || !title || titleValue.trim().length > 200) return { error: 'Укажите название игры (не более 200 символов).' } as const;
+  if (typeof descriptionValue !== 'string' || descriptionValue.length > 4000) return { error: 'Описание должно быть не длиннее 4000 символов.' } as const;
+  if (typeof imageValue !== 'string' || imageValue.length > 1000 || imageUrl === null) return { error: 'Обложка должна быть локальным файлом /assets/… или HTTPS-ссылкой на vkuserphoto.ru.' } as const;
+  if (typeof ageValue !== 'string' || ageValue.length > 100) return { error: 'Возраст должен быть не длиннее 100 символов.' } as const;
+  if (typeof formatValue !== 'string' || !catalogFormats.has(format)) return { error: 'Выберите формат онлайн, офлайн или смешанный.' } as const;
+  if (typeof priceValue !== 'string' || priceValue.length > 100) return { error: 'Цена должна быть не длиннее 100 символов.' } as const;
+  if (!catalogSystemKeys.has(systemKey)) return { error: 'Выберите поддерживаемую систему игры.' } as const;
   if (!gameType) return { error: 'Выберите тип игры.' } as const;
-  return { systemKey, title, description, imageUrl, age, format, price, gameType, status, sortOrder, published } as const;
+  if (typeof statusValue !== 'string' || statusValue.length > 80) return { error: 'Метка должна быть не длиннее 80 символов.' } as const;
+  if (!Number.isInteger(body.sortOrder) || sortOrder !== body.sortOrder || sortOrder > 100000) return { error: 'Порядок должен быть целым числом от 0 до 100000.' } as const;
+  if (!publicationStatus) return { error: 'Выберите статус публикации.' } as const;
+  if (body.revision !== undefined && (!Number.isInteger(body.revision) || Number(body.revision) < 1)) return { error: 'Версия записи некорректна.' } as const;
+
+  return { systemKey, title, description, imageUrl, age, format, price, gameType, status, sortOrder, publicationStatus, published: publicationStatus === 'published' } as const;
 }
 
 async function handle(request: Request, env: Env): Promise<Response> {
@@ -385,10 +454,32 @@ async function handle(request: Request, env: Env): Promise<Response> {
     const existing = await env.DB.prepare('SELECT id FROM applications WHERE submission_id = ?').bind(text(body.submissionId, 100)).first();
     if (existing) return json({ ok: true, notice: 'Заявка уже принята.' });
     const eventId = text(body.eventId, 100) || null, occurrenceDate = validDate(body.occurrenceDate) ? body.occurrenceDate : null;
-    if (eventId && occurrenceDate && !await findSelection(env, eventId, occurrenceDate)) return json({ ok: false, error: 'Выбранная игра больше недоступна.', selectionChanged: true }, 409);
+    let gameTitle = text(body.system, 200) || 'Подбор игры';
+    if (eventId && occurrenceDate) {
+      const selection = await findSelection(env, eventId, occurrenceDate);
+      if (!selection) return json({ ok: false, error: 'Выбранная игра больше недоступна.', selectionChanged: true }, 409);
+      gameTitle = selection.title;
+    }
     const timestamp = nowIso();
     const applicationId = id();
-    await env.DB.prepare(`INSERT INTO applications (id, submission_id, event_id, occurrence_date, event_revision, name, contact, players, format, place, experience, system, genres, tone, wishes, schedule, boundaries, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(applicationId, text(body.submissionId, 100) || applicationId, eventId, occurrenceDate, text(body.eventRevision, 50) || null, name, contact, players, text(body.format, 200), text(body.place, 200), text(body.experience, 2000), text(body.system, 200), text(body.genres, 500), text(body.tone, 500), text(body.wishes, 4000), text(body.schedule, 2000), text(body.boundaries, 2000), timestamp, timestamp).run();
+    await env.DB.prepare(`INSERT INTO applications (
+      id, submission_id, event_id, occurrence_date, event_revision, name, contact, players,
+      format, place, experience, system, genres, tone, wishes, schedule, boundaries,
+      utm_source, utm_medium, utm_campaign, utm_content, utm_term, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+      applicationId, text(body.submissionId, 100) || applicationId, eventId, occurrenceDate,
+      text(body.eventRevision, 50) || null, name, contact, players, text(body.format, 200),
+      text(body.place, 200), text(body.experience, 2000), text(body.system, 200),
+      text(body.genres, 500), text(body.tone, 500), text(body.wishes, 4000),
+      text(body.schedule, 2000), text(body.boundaries, 2000), text(body.utmSource, 100),
+      text(body.utmMedium, 100), text(body.utmCampaign, 100), text(body.utmContent, 100),
+      text(body.utmTerm, 100), timestamp, timestamp,
+    ).run();
+    try {
+      await notifyWebApplication(env, gameTitle, occurrenceDate);
+    } catch (error) {
+      console.error('web_application_telegram_notification_failed', error instanceof Error ? error.message : 'unknown error');
+    }
     return json({ ok: true });
   }
   const session = await auth(request, env);
@@ -426,7 +517,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
     if ('error' in input) return json({ error: input.error }, 400);
     const timestamp = nowIso();
     const itemId = id();
-    await env.DB.prepare(`INSERT INTO catalog_items (id, system_key, title, description, image_url, age, format, price, game_type, status, sort_order, published, revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`).bind(itemId, input.systemKey, input.title, input.description, input.imageUrl, input.age, input.format, input.price, input.gameType, input.status, input.sortOrder, input.published ? 1 : 0, timestamp, timestamp).run();
+    await env.DB.prepare(`INSERT INTO catalog_items (id, system_key, title, description, image_url, age, format, price, game_type, status, sort_order, published, publication_status, revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`).bind(itemId, input.systemKey, input.title, input.description, input.imageUrl, input.age, input.format, input.price, input.gameType, input.status, input.sortOrder, input.published ? 1 : 0, input.publicationStatus, timestamp, timestamp).run();
     const created = await env.DB.prepare('SELECT * FROM catalog_items WHERE id = ?').bind(itemId).first<Row>();
     return json({ item: created ? toCatalogItem(created) : { id: itemId } }, 201);
   }
@@ -444,7 +535,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
     if (!isRecord(body)) return json({ error: 'Некорректные данные.' }, 400);
     const input = normalizeCatalogInput(body, current);
     if ('error' in input) return json({ error: input.error }, 400);
-    const result = await env.DB.prepare(`UPDATE catalog_items SET system_key = ?, title = ?, description = ?, image_url = ?, age = ?, format = ?, price = ?, game_type = ?, status = ?, sort_order = ?, published = ?, revision = revision + 1, updated_at = ? WHERE id = ? AND revision = ?`).bind(input.systemKey, input.title, input.description, input.imageUrl, input.age, input.format, input.price, input.gameType, input.status, input.sortOrder, input.published ? 1 : 0, nowIso(), itemId, Number(body.revision ?? 0)).run();
+    const result = await env.DB.prepare(`UPDATE catalog_items SET system_key = ?, title = ?, description = ?, image_url = ?, age = ?, format = ?, price = ?, game_type = ?, status = ?, sort_order = ?, published = ?, publication_status = ?, revision = revision + 1, updated_at = ? WHERE id = ? AND revision = ?`).bind(input.systemKey, input.title, input.description, input.imageUrl, input.age, input.format, input.price, input.gameType, input.status, input.sortOrder, input.published ? 1 : 0, input.publicationStatus, nowIso(), itemId, Number(body.revision ?? 0)).run();
     if (!result.meta.changes) return json({ error: 'Запись уже изменилась. Обновите страницу.' }, 409);
     const updated = await env.DB.prepare('SELECT * FROM catalog_items WHERE id = ?').bind(itemId).first<Row>();
     return json({ item: updated ? toCatalogItem(updated) : { id: itemId } });

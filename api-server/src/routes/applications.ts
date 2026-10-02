@@ -4,12 +4,13 @@ import {
   SubmitApplicationBody,
   SubmitApplicationResponse,
 } from "@workspace/api-zod";
+import { apiEndpoint } from "../config";
 
 const router: IRouter = Router();
 
 const applicationsSourceUrl =
   process.env.APPLICATIONS_SOURCE_URL ??
-  "https://dndmaster.dndmaster.workers.dev/api/applications";
+  apiEndpoint("applications");
 const sourceTimeoutMs = 10_000;
 const applicationWindowMs = 15 * 60 * 1000;
 const applicationLimit = 5;

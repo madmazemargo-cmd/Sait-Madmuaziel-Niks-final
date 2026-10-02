@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
+import { apiEndpoint } from "../config";
 
 const router: IRouter = Router();
 const catalogSourceUrl =
   process.env.CATALOG_SOURCE_URL ??
-  "https://madmuazelle-niks-api.dndmaster.workers.dev/api/catalog";
+  apiEndpoint("catalog");
 const sourceTimeoutMs = 8_000;
 
 function isCatalogPayload(payload: unknown): payload is { items: unknown[] } {

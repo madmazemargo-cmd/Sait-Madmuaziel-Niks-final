@@ -9,6 +9,11 @@
     "build:production": "pnpm run typecheck && pnpm --filter @workspace/nyx-dnd-site run build && pnpm --filter @workspace/api-server run build",
     "dev": "pnpm --parallel --filter @workspace/api-server --filter @workspace/nyx-dnd-site run dev",
     "start": "pnpm --filter @workspace/api-server run start",
+    "test:catalog": "pnpm --filter @workspace/scripts exec tsx --test test-catalog-schema.mjs",
+    "test:worker": "pnpm --filter @workspace/scripts exec tsx --test test-worker-applications.mjs",
+    "test:api-origin": "pnpm --filter @workspace/scripts exec tsx --test test-api-origin.mjs",
+    "test:proxy": "node scripts/test-pages-proxy.mjs",
+    "test:e2e": "playwright test",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
@@ -17,7 +22,9 @@
     "@replit/connectors-sdk": "^0.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "prettier": "^3.9.6",
+    "sharp": "^0.35.5",
     "typescript": "~5.9.3"
   }
 }

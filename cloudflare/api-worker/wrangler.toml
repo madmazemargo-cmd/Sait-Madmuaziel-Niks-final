@@ -7,6 +7,7 @@ compatibility_date = "2026-09-20"
 ALLOWED_ORIGIN = "https://sait-madmuaziel-niks-final.pages.dev"
 MINI_APP_URL = "https://sait-madmuaziel-niks-final.pages.dev/mini"
 GAME_TIMEZONE = "Europe/Moscow"
+PUBLIC_SITE_ORIGIN = "https://sait-madmuaziel-niks-final.pages.dev"
 
 [triggers]
 crons = ["*/5 * * * *"]

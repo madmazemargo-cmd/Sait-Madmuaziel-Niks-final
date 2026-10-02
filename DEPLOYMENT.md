@@ -27,9 +27,7 @@ docker build --build-arg SITE_URL=https://example.ru -t madmuazelle-niks .
 docker run -d --name madmuazelle-niks --restart unless-stopped \
   -p 8080:8080 \
   -e ALLOWED_ORIGINS=https://example.ru \
-  -e CALENDAR_SOURCE_URL=https://madmuazelle-niks-api.dndmaster.workers.dev/api/calendar \
-  -e CATALOG_SOURCE_URL=https://madmuazelle-niks-api.dndmaster.workers.dev/api/catalog \
-  -e APPLICATIONS_SOURCE_URL=https://madmuazelle-niks-api.dndmaster.workers.dev/api/applications \
+  -e API_ORIGIN=https://madmuazelle-niks-api.dndmaster.workers.dev \
   madmuazelle-niks
 ```
 
@@ -51,7 +49,7 @@ curl http://127.0.0.1:8080/api/healthz
 corepack enable
 pnpm install --frozen-lockfile
 SITE_URL=https://example.ru pnpm run build:production
-PORT=8080 NODE_ENV=production ALLOWED_ORIGINS=https://example.ru pnpm start
+PORT=8080 NODE_ENV=production ALLOWED_ORIGINS=https://example.ru API_ORIGIN=https://madmuazelle-niks-api.dndmaster.workers.dev pnpm start
 ```
 
 На Windows переменные окружения задаются так:
@@ -61,6 +59,7 @@ $env:SITE_URL = "https://example.ru"
 $env:PORT = "8080"
 $env:NODE_ENV = "production"
 $env:ALLOWED_ORIGINS = "https://example.ru"
+$env:API_ORIGIN = "https://madmuazelle-niks-api.dndmaster.workers.dev"
 pnpm run build:production
 pnpm start
 ```

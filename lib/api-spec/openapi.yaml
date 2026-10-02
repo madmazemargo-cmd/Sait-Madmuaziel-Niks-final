@@ -292,6 +292,21 @@ components:
           type: ["string", "null"]
         eventRevision:
           type: ["string", "null"]
+        utmSource:
+          type: string
+          maxLength: 100
+        utmMedium:
+          type: string
+          maxLength: 100
+        utmCampaign:
+          type: string
+          maxLength: 100
+        utmContent:
+          type: string
+          maxLength: 100
+        utmTerm:
+          type: string
+          maxLength: 100
       required:
         - submissionId
         - name

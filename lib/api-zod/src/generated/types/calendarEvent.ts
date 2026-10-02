@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { CalendarEventGameType } from './calendarEventGameType';
 
 export interface CalendarEvent {
   id: string;
@@ -12,7 +13,8 @@ export interface CalendarEvent {
   /** @pattern ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ */
   eventDate: string;
   startTime: string;
-  gameType?: 'campaign' | 'module' | 'oneshot' | string;
+  gameType?: CalendarEventGameType;
+  /** @nullable */
   catalogItemId?: string | null;
   status: string;
   /** @nullable */
