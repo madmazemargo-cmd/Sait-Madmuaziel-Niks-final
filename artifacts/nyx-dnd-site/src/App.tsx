@@ -154,7 +154,7 @@ function formatSpots(seats: number | null) {
 function formatPlace(event: CalendarEvent) {
   const location = event.location.trim();
   if (event.format === 'online') return location ? `Онлайн · ${location}` : 'Онлайн';
-  if (event.format === 'offline') return !location || location.toLowerCase() === 'москва' ? 'Москва' : `Москва · ${location}`;
+  if (event.format === 'offline') return !location || /^(г\.\s*)?москва$/i.test(location) ? 'Очно в Москве · антикафе' : `Очно в Москве · ${location}`;
   return event.location || 'Формат уточняется';
 }
 
@@ -193,7 +193,7 @@ function toGame(event: CalendarEvent, occurrenceDate: string): Game {
     date: formatDate(occurrenceDate),
     time: event.status === 'day_off' ? '—' : event.startTime || 'Время уточняется',
     place: formatPlace(event),
-    price: event.price || 'Уточняется',
+    price: event.price ? (/\d/.test(event.price) && !/₽|руб|rub/i.test(event.price) ? `${event.price} ₽` : event.price) : 'Уточняется',
     spots: formatSpots(event.seats),
     image: eventImage(event),
     description: event.description || 'Подробности игры обсудим перед подтверждением участия.',
@@ -221,6 +221,33 @@ function expandEvents(events: CalendarEvent[], startDate: string, endDate: strin
       return occurrences;
     })
     .sort((a, b) => `${a.dateISO}${a.time}${a.title}`.localeCompare(`${b.dateISO}${b.time}${b.title}`));
+}
+
+function hasOpenSeats(game: Game) {
+  return game.status === 'available' && game.seats !== null && game.seats > 0;
+}
+
+function matchesFormat(game: Game, format: string) {
+  return format === 'all' || game.format === format;
+}
+
+function meetingPrice(price: string) {
+  const value = price.trim();
+  if (!value || /уточня/i.test(value)) return 'Цена уточняется до записи';
+  return /человек|игрок|встреч|сесси|групп/i.test(value) ? value : value + ' / человек / встреча';
+}
+
+function OpenGameCard({ game, onDetails }: { game: Game; onDetails?: (game: Game) => void }) {
+  return <article className="open-game-card" data-testid={`open-game-${game.id}`}>
+    <div className="catalog-kicker">{gameTypeLabel(game.gameType)} · {game.system}</div>
+    <h3>{game.title}</h3>
+    <p className="open-game-date">{game.date} · {game.time} МСК</p>
+    <dl><div><dt>Где</dt><dd>{game.place}</dd></div><div><dt>Длительность</dt><dd>{game.duration || 'Уточняется до записи'}</dd></div><div><dt>Стоимость</dt><dd>{meetingPrice(game.price)}</dd></div><div><dt>Места</dt><dd>{game.spots}</dd></div><div><dt>Опыт</dt><dd>{game.experience || 'Уточним перед записью'}</dd></div>{game.age && <div><dt>Возраст</dt><dd>{game.age}</dd></div>}</dl>
+    <p>{game.description}</p>
+    {game.format === 'offline' && <p className="open-game-extra">Антикафе оплачивается отдельно.</p>}
+    <div className="hero-actions"><Link className="button button-primary" href={`/anketa?event=${encodeURIComponent(game.eventId)}&date=${game.dateISO}`}>Записаться <ArrowUpRight size={14} /></Link>{onDetails && <button type="button" className="button button-ghost" onClick={() => onDetails(game)}>Подробнее</button>}</div>
+    <JsonLd data={eventStructuredData(game)} />
+  </article>;
 }
 
 function canApply(game: Game) {
@@ -332,23 +359,10 @@ function Shell({ children }: { children: ReactNode }) {
         <footer className="footer" data-testid="site-footer">
           <span>© 2026 Мадмуазель Никс · авторские игры</span>
           <div className="footer-links">
-            <a href="https://t.me/mad_maze_elle" target="_blank" rel="noreferrer" data-testid="link-telegram">Написать в Telegram</a>
-            <a href="https://t.me/mad_maze_elle_dnd" target="_blank" rel="noreferrer" data-testid="link-channel">Telegram-канал</a>
+            <a href="https://t.me/mad_maze_elle" target="_blank" rel="noreferrer" data-testid="link-telegram">Telegram</a>
             <a href="https://discord.com/invite/madmazeellednd" target="_blank" rel="noreferrer" data-testid="link-discord">Discord</a>
-            <Link href="/anketa" data-testid="link-footer-apply">Заполнить анкету</Link>
-            <a className="footer-support" href="https://dzen.ru/mad_maze_elle_dnd?donate=true" target="_blank" rel="noreferrer" data-testid="link-support">Поддержать проект</a>
-            <Link href="/privacy">Политика данных</Link>
-            <Link href="/terms">Условия</Link>
             <Link href="/offer">Оферта</Link>
-            <Link href="/reviews">Оставить отзыв</Link>
-            <Link href="/novichkam">Новичкам</Link>
-            <Link href="/dnd">D&amp;D</Link>
-            <Link href="/vampire">Vampire</Link>
-            <Link href="/daggerheart">Daggerheart</Link>
-            <Link href="/cyberpunk">Cyberpunk</Link>
-            <Link href="/online">Онлайн</Link>
-            <Link href="/offline">Очно в Москве</Link>
-            <a className="footer-icons-credit" href="https://www.flaticon.com/uicons" target="_blank" rel="noreferrer">Иконки: Flaticon UIcons</a>
+            <Link href="/privacy">Политика конфиденциальности</Link>
           </div>
         </footer>
       </div>
@@ -366,10 +380,10 @@ type CatalogSystem = {
 };
 
 const catalogGroups: CatalogSystem[] = [
-  { number: '01', slug: 'dnd', title: 'Dungeons & Dragons', subtitle: 'D&D 5e', status: 'Ваншоты и кампании', artwork: '/assets/system-dnd.webp' },
+  { number: '01', slug: 'dnd', title: 'Dungeons & Dragons', subtitle: 'D&D 5e', status: 'Классическое фэнтези', artwork: '/assets/system-dnd.webp' },
   { number: '02', slug: 'vampires', title: 'Вампиры: Маскарад', subtitle: 'Vampire: The Masquerade', status: 'Готический хоррор', artwork: '/assets/system-vampires.webp' },
-  { number: '03', slug: 'daggerheart', title: 'Daggerheart', subtitle: 'Героическое фэнтези', status: 'Игры и кампании', artwork: '/assets/system-daggerheart.webp' },
-  { number: '04', slug: 'cyberpunk', title: 'Cyberpunk 2020', subtitle: 'Тёмное будущее', status: 'Игры и кампании', artwork: '/assets/system-cyberpunk.webp' },
+  { number: '03', slug: 'daggerheart', title: 'Daggerheart', subtitle: 'Героическое фэнтези', status: 'Акцент на персонажах', artwork: '/assets/system-daggerheart.webp' },
+  { number: '04', slug: 'cyberpunk', title: 'Cyberpunk 2020', subtitle: 'Тёмное будущее', status: 'Мир ближайшего будущего', artwork: '/assets/system-cyberpunk.webp' },
   { number: '05', slug: 'cthulhu', title: 'Зов Ктулху', subtitle: 'Call of Cthulhu', status: 'В разработке', artwork: '/assets/system-cthulhu.webp' },
 ];
 
@@ -409,7 +423,7 @@ function catalogFormatLabel(value: string) {
   if (!normalized) return 'Онлайн или очно';
   if ((normalized.includes('online') || normalized.includes('онлайн')) && (normalized.includes('offline') || normalized.includes('очно'))) return 'Онлайн и очно';
   if (normalized === 'online' || normalized === 'онлайн') return 'Онлайн';
-  if (normalized === 'offline' || normalized === 'оффлайн' || normalized === 'очно' || normalized === 'офлайн') return 'Очно';
+  if (normalized === 'offline' || normalized === 'оффлайн' || normalized === 'очно' || normalized === 'офлайн') return 'Очно в Москве';
   return value.trim();
 }
 
@@ -433,7 +447,7 @@ function SystemShowcase({ selectedSystem }: { selectedSystem?: string }) {
     <section className="catalog-kind" aria-labelledby="catalog-systems-title">
       <div className="catalog-kind-heading">
         <div><span className="catalog-kicker">СИСТЕМЫ</span><h3 id="catalog-systems-title">Выберите мир</h3></div>
-        <p>Нажми на обложку, чтобы открыть игры в этой системе.</p>
+        <p>Нажмите на обложку, чтобы открыть игры в этой системе.</p>
       </div>
       {selectedSystem && <div className="catalog-filter-status"><span>Выбрана система: {catalogGroups.find((group) => group.slug === selectedSystem)?.title}</span><Link href="/games">Показать все</Link></div>}
       <div className="system-showcase-grid">
@@ -453,6 +467,7 @@ function SystemShowcase({ selectedSystem }: { selectedSystem?: string }) {
           </Link>
         ))}
       </div>
+
     </section>
   );
 }
@@ -467,19 +482,22 @@ function CatalogSection({ id = 'catalog', selectedSystem }: { id?: string; selec
         </div>
         <p>Пять систем — от готического хоррора до светлого фэнтези и неонового будущего. Формат, тон и состав группы обсудим до записи.</p>
       </div>
+      <nav className="system-guide-links" aria-label="Знакомство с системами">
+        <Link href="/dnd">О D&amp;D</Link><Link href="/vampire">О Vampire</Link><Link href="/daggerheart">О Daggerheart</Link><Link href="/cyberpunk">О Cyberpunk</Link>
+      </nav>
       <div className="catalog-layout">
         <div className="catalog-kinds"><SystemShowcase selectedSystem={selectedSystem} /></div>
         <aside className="pricing-panel" id="prices" aria-labelledby="prices-title">
           <span className="catalog-kicker">КОШЕЛЁЧЕК ДЛЯ МАДМУАЗЕЛЬ</span>
           <div className="pricing-rune" aria-hidden="true">₽</div>
           <h3 id="prices-title">Цены<br /><em>на игры</em></h3>
-          <p className="pricing-intro">Для кампаний и ваншотов цена едина для онлайн-игр и игр очно в Москве.</p>
+          <p className="pricing-intro">Базовая стоимость за человека за одну встречу одинакова онлайн и очно в Москве.</p>
           <dl className="pricing-list">
-            <div><dt>Кампании</dt><dd>1 000 руб.</dd></div>
-            <div><dt>Ваншоты</dt><dd>1 500 руб.</dd></div>
+            <div><dt>Кампания · серия встреч</dt><dd>1 000 руб.</dd></div>
+            <div><dt>Ваншот · одна встреча</dt><dd>1 500 руб.</dd></div>
             <div><dt>Закрытая группа</dt><dd>отдельный расчёт</dd></div>
           </dl>
-          <p className="pricing-note">В стоимость входит подготовка мастера, помощь с персонажем и материалы по сценарию.</p>
+          <p className="pricing-note">Включены подготовка мастера, помощь с персонажем и материалы. Антикафе оплачивается отдельно. Цена конкретной встречи указана в её карточке; особые условия и бюджет закрытой группы согласуем до оплаты.</p>
           <Link href="/anketa" className="text-link">Подобрать игру <ArrowUpRight size={14} /></Link>
         </aside>
       </div>
@@ -502,7 +520,7 @@ function CatalogGameCard({ item }: { item: CatalogItem }) {
   const format = catalogFormatLabel(item.format);
   const price = item.price?.trim() || (item.gameType === 'campaign' ? '1 000 руб.' : '1 500 руб.');
   const age = item.age?.trim() || 'Возраст уточняется';
-  const players = item.players?.trim() || '3–5 игроков';
+  const players = item.players?.trim() || 'Состав уточняется';
   const tags = Array.from(new Set([kind, age, format, ...(item.status?.trim() ? [item.status.trim()] : []), ...(item.tags ?? []), ...(isBeginnerFriendly(item) ? ['Подходит новичкам'] : [])]));
 
   return (
@@ -516,7 +534,7 @@ function CatalogGameCard({ item }: { item: CatalogItem }) {
         <h2>{item.title}</h2>
         <p>{item.description || 'Детали истории и тон игры обсудим перед записью.'}</p>
         <dl className="catalog-game-facts">
-          <div><dt>Цена</dt><dd>{price}</dd></div>
+          <div><dt>Цена</dt><dd>{meetingPrice(price)}</dd></div>
           <div><dt>Стол</dt><dd>{players}</dd></div>
           <div><dt>Формат</dt><dd>{format}</dd></div>
           {item.duration && <div><dt>Длительность</dt><dd>{item.duration}</dd></div>}
@@ -614,31 +632,31 @@ const landingPages: Record<string, LandingPageConfig> = {
     lead: 'Не нужно знать правила, иметь костюмы или приходить компанией. Я объясню игру, помогу с персонажем и бережно введу в историю.',
     description: 'Настольные ролевые игры для новичков в Москве и онлайн: понятный старт, небольшие группы и ведущая рядом.', image: '/assets/table.jpg',
     points: [{ title: 'Объясню правила', text: 'Короткая вводная перед игрой и подсказки по ходу, без проверки домашнего задания.' }, { title: 'Соберу комфортную группу', text: 'Перед подтверждением знакомлю игроков и сверяю ожидания по тону и темпу.' }, { title: 'Можно прийти одному', text: 'Открытые столы рассчитаны на знакомство, а компанию можно собрать под запрос.' }],
-    faq: [{ question: 'А если я стесняюсь?', answer: 'Это нормально. Можно говорить мало, наблюдать и включаться в сцену тогда, когда готово.' }, { question: 'Что взять с собой?', answer: 'Только себя. Материалы, ссылки и инструкции пришлю до встречи.' }], offer: 'Первый стол настольной ролевой игры для новичков',
+    faq: [{ question: 'А если я стесняюсь?', answer: 'Это нормально. Можно говорить мало, наблюдать и включаться в сцену в удобном для вас темпе.' }, { question: 'Что взять с собой?', answer: 'Только себя. Материалы, ссылки и инструкции пришлю до встречи.' }], offer: 'Первый стол настольной ролевой игры для новичков',
   },
   online: {
     slug: 'online', path: '/online', eyebrow: 'онлайн · любой экран', title: 'Игра, для которой не нужен один город',
     lead: 'Подключайтесь из дома: подготовленные материалы, понятные ссылки и тот же живой стол, только через экран.',
     description: 'Онлайн-настольные ролевые игры Мадмуазель Никс: D&D, Vampire, Daggerheart и Cyberpunk для игроков из любого города.', format: 'online', image: '/assets/table.jpg',
     points: [{ title: 'Подключение за 10 минут', text: 'После подтверждения пришлю ссылку, памятку и всё, что понадобится для старта.' }, { title: 'Камера по желанию', text: 'Важнее голос, внимание и желание быть в истории — формат подстроим под группу.' }, { title: 'Москва и другие часовые пояса', text: 'Сверяем время заранее и фиксируем его в приглашении по Москве.' }],
-    faq: [{ question: 'Какие сервисы нужны?', answer: 'Подробности зависят от игры. Ссылки и инструкции приходят после подтверждения.' }, { question: 'Можно ли играть с телефона?', answer: 'Лучше компьютер с гарнитурой, но для коротких встреч подойдёт и планшет.' }], offer: 'Онлайн-участие в настольной ролевой игре',
+    faq: [{ question: 'Какие сервисы нужны?', answer: 'Для связи — Discord или Яндекс Телемост, для игры — Foundry VTT. Подготовьте компьютер, микрофон и стабильный интернет. Ссылки и инструкции пришлю перед встречей.' }, { question: 'Можно ли играть с телефона?', answer: 'Лучше компьютер с гарнитурой, но для коротких встреч подойдёт и планшет.' }], offer: 'Онлайн-участие в настольной ролевой игре',
   },
   offline: {
     slug: 'offline', path: '/offline', eyebrow: 'очно · москва', title: 'За одним столом всё звучит иначе',
-    lead: 'Карты, миниатюры, живые паузы и общая энергия комнаты. Офлайн-игры проходят в уютных местах в центре Москвы.',
+    lead: 'Карты, миниатюры, живые паузы и общая энергия комнаты. Очные игры проходят в антикафе Москвы; площадку согласуем для конкретной встречи.',
     description: 'Очные настольные ролевые игры Мадмуазель Никс в Москве: камерные группы, авторские материалы и безопасная атмосфера.', format: 'offline', image: '/assets/table.jpg',
-    points: [{ title: 'Центр Москвы', text: 'Точный адрес и время отправляю после подтверждения состава группы.' }, { title: 'Материалы уже на столе', text: 'Карты, жетоны и печатные материалы входят в подготовку игры.' }, { title: 'Комфортная группа', text: 'Сверяем ожидания и границы заранее, чтобы за столом можно было играть свободно.' }],
-    faq: [{ question: 'Где именно проходят игры?', answer: 'Обычно в антикафе рядом с Бауманской или Курской. Точный адрес зависит от даты.' }, { question: 'Есть ли возрастные ограничения?', answer: 'Для каждой игры указаны свои условия. Напишите в анкете, если хотите уточнить.' }], offer: 'Очное участие в настольной ролевой игре в Москве',
+    points: [{ title: 'Антикафе Москвы', text: 'Площадку и адрес согласуем до подтверждения записи. Антикафе оплачивается отдельно.' }, { title: 'Материалы уже на столе', text: 'Карты, жетоны и печатные материалы входят в подготовку игры.' }, { title: 'Комфортная группа', text: 'Сверяем ожидания и границы заранее, чтобы за столом можно было играть свободно.' }],
+    faq: [{ question: 'Где именно проходят игры?', answer: 'В антикафе Москвы. Площадка и адрес зависят от встречи и сообщаются до подтверждения записи. Антикафе оплачивается отдельно.' }, { question: 'Есть ли возрастные ограничения?', answer: 'Для каждой игры указаны свои условия. Напишите в анкете, если хотите уточнить.' }], offer: 'Очное участие в настольной ролевой игре в Москве',
   },
 };
 
 const homeFaq = [
-  { question: 'Можно, если я никогда не играла?', answer: 'Да. Большинство групп открыты для новичков. Я объясню базовые правила до начала и буду рядом, когда появится первый вопрос.' },
+  { question: 'Можно, если у меня совсем нет опыта?', answer: 'Да. Большинство групп открыты для новичков. Я объясню базовые правила до начала и буду рядом, когда появится первый вопрос.' },
   { question: 'Сколько длится игра?', answer: 'Обычно 4–5 часов с коротким перерывом. Перед каждой встречей я заранее обозначу точное время окончания.' },
   { question: 'Что входит в цену?', answer: 'Подготовка сюжета и материалов, ведение игры, музыка, карты и пост-игровое резюме. Для онлайна — все нужные ссылки.' },
-  { question: 'А если я не смогу прийти?', answer: 'Предупреди минимум за 48 часов — перенесём запись или вернём оплату. При срочной ситуации сначала поговорим.' },
-  { question: 'Где проходят офлайн-игры?', answer: 'В уютных антикафе в центре Москвы, обычно рядом с метро Бауманская или Курская. Точный адрес приходит после подтверждения группы.' },
-  { question: 'Можно придумать свою кампанию?', answer: 'Конечно. В анкете есть поле для идеи — расскажи, какой мир хочется прожить, а я предложу формат и бюджет.' },
+  { question: 'А если я не смогу прийти?', answer: 'Предупредите минимум за 48 часов — перенесём запись или вернём оплату. При срочной ситуации сначала поговорим.' },
+  { question: 'Где проходят офлайн-игры?', answer: 'В антикафе Москвы. Точную площадку и адрес согласуем до подтверждения записи. Антикафе оплачивается отдельно.' },
+  { question: 'Можно придумать свою кампанию?', answer: 'Конечно. В анкете есть поле для идеи — расскажите, какой мир хочется прожить, а я предложу формат и бюджет.' },
 ];
 
 function JsonLd({ data }: { data: unknown }) {
@@ -663,27 +681,21 @@ function eventStructuredData(game: Game) {
 }
 
 function NextGameSection({ system, format }: { system?: string; format?: 'online' | 'offline' }) {
-  const { games, isLoading, isError } = useLiveGames();
-  const next = games.find((game) => {
-    if (game.dateISO < todayInMoscow() || calendarOnlyStatuses.has(game.status) || !canApply(game)) return false;
-    if (system && normalizeSystemKey(`${game.system} ${game.title}`) !== system) return false;
-    if (format) {
-      const normalizedFormat = game.format.toLowerCase();
-      const matchesFormat = format === 'online'
-        ? normalizedFormat.includes('online') || normalizedFormat.includes('онлайн')
-        : normalizedFormat.includes('offline') || normalizedFormat.includes('очно') || normalizedFormat.includes('офлайн');
-      if (!matchesFormat) return false;
-    }
-    return true;
-  });
-  return <section className="next-game-section" aria-labelledby="next-game-title">
-    <div className="next-game-copy"><span className="catalog-kicker">БЛИЖАЙШИЙ СТОЛ</span><h2 id="next-game-title">Следующая история уже ищет игроков</h2><p>{isError ? 'Календарь временно недоступен. Оставьте заявку — я пришлю ближайшие варианты.' : 'Свободные места обновляются из календаря. Можно присоединиться к открытому столу или попросить подобрать дату.'}</p><Link href="/calendar" className="button button-ghost">Открыть календарь <ArrowUpRight size={15} /></Link></div>
-    <div className="next-game-card" aria-live="polite">
-      {isLoading && <span className="next-game-state">Проверяю ближайшие даты…</span>}
-      {!isLoading && next && <><div className="next-game-date"><strong>{next.dateISO.slice(8)}</strong><span>{formatDayName(next.dateISO)}</span></div><div className="next-game-info"><span>{next.time} · {next.place}</span><h3>{next.title}</h3><p>{next.system || 'Авторская игра'} · {next.price || 'Цена уточняется'}</p></div><div className="next-game-spots"><strong>{formatSpots(next.seats)}</strong><Link href={`/anketa?event=${encodeURIComponent(next.eventId)}&date=${encodeURIComponent(next.dateISO)}`} aria-label={`Оставить заявку на игру ${next.title}`}>Записаться <ArrowUpRight size={14} /></Link></div><JsonLd data={eventStructuredData(next)} /></>}
-      {!isLoading && !next && <span className="next-game-state">Подходящих открытых столов пока нет. <Link href="/anketa">Соберём группу под запрос</Link>.</span>}
-    </div>
+  const { games, isLoading, isError, refetch } = useLiveGames();
+  const [selectedFormat, setSelectedFormat] = useState(format ?? 'all');
+  const openGames = games.filter((game) => hasOpenSeats(game) && matchesFormat(game, selectedFormat) && (!system || normalizeSystemKey(game.system) === system)).slice(0, 3);
+  return <section className="section open-games" id="open-games" aria-labelledby="next-game-title">
+    <div className="section-head"><div><span className="catalog-kicker">ОТКРЫТЫЕ НАБОРЫ</span><h2 id="next-game-title">Ближайшие игры</h2></div><p className="section-intro">Выберите встречу со свободными местами. Всё время указано по Москве. <Link href={`/calendar?format=${selectedFormat}`}>Все даты в календаре →</Link></p></div>
+    {!format && <div className="catalog-kind-filters" role="group" aria-label="Формат ближайших игр">{[['all','Все'],['offline','Очно в Москве'],['online','Онлайн']].map(([value,label]) => <button type="button" key={value} className={selectedFormat === value ? 'is-active' : ''} onClick={() => setSelectedFormat(value)}>{label}</button>)}</div>}
+    {isLoading ? <p role="status">Проверяю ближайшие даты…</p> : isError ? <div className="calendar-state" role="alert"><p>Не удалось загрузить актуальные наборы.</p><button className="button button-ghost" onClick={() => refetch()}>Повторить</button></div> : openGames.length ? <div className="open-games-grid">{openGames.map((game) => <OpenGameCard key={game.id} game={game} />)}</div> : <div className="calendar-state"><p>В ближайшие 90 дней подходящих игр с подтверждёнными свободными местами пока нет.</p><Link className="button button-ghost" href="/anketa">Помогите подобрать игру</Link></div>}
   </section>;
+}
+
+function FormatsSection() {
+  return <section className="section formats-section" id="formats" aria-label="Где и как играем"><div className="format-cards">
+    <article><span className="catalog-kicker">ЗА ОДНИМ СТОЛОМ</span><h2>Очно в Москве</h2><p>Встречаемся в антикафе. Площадку, адрес и ближайшее метро согласуем до подтверждения записи.</p><p>Обычно игра длится 4–5 часов с перерывом; точная длительность — в карточке встречи. Антикафе оплачивается отдельно от игры.</p><Link href="/calendar?format=offline" className="button button-ghost">Найти встречу в Москве</Link><Link href="/offline" className="format-details">Подробнее об очных играх →</Link></article>
+    <article><span className="catalog-kicker">ИЗ ЛЮБОГО ГОРОДА</span><h2>Играть онлайн</h2><p>Общаемся в Discord или Яндекс Телемосте, играем в Foundry VTT. Ссылки и инструкции пришлю перед встречей.</p><p>Подготовьте компьютер, микрофон и стабильный интернет. Время в расписании московское, длительность указана у каждой игры.</p><Link href="/calendar?format=online" className="button button-ghost">Найти онлайн-игру</Link><Link href="/online" className="format-details">Подробнее об онлайне →</Link></article>
+  </div><p className="formats-community">Новости и общение: <a href="https://t.me/mad_maze_elle_dnd" target="_blank" rel="noreferrer">Telegram-канал сообщества</a></p></section>;
 }
 
 type Review = { id: string; name: string; review: string; game: string; rating: number | null; createdAt: string };
@@ -695,7 +707,8 @@ function usePublishedReviews() {
 function ReviewsSection() {
   const { data, isLoading } = usePublishedReviews();
   const reviews = data?.reviews ?? [];
-  return <section className="trust-section reviews-section" data-testid="testimonial-section"><div className="section-kicker">отзывы с разрешением на публикацию</div><h2>{reviews.length ? <>Истории,<br />которые уже случились</> : <>Пусть твоя история<br />станет следующей</>}</h2>{isLoading && <p className="reviews-empty">Загружаю отзывы игроков…</p>}{!isLoading && reviews.length > 0 && <div className="reviews-grid">{reviews.slice(0, 3).map((review) => <article className="review-card" key={review.id}><p>«{review.review}»</p><footer>— {review.name}{review.game ? ` · ${review.game}` : ''}</footer></article>)}</div>}{!isLoading && !reviews.length && <div className="reviews-empty"><p>Я собираю первые отзывы с отдельным согласием на публикацию. Расскажите, что запомнилось после игры — это помогает новым игрокам решиться.</p><Link className="button button-ghost" href="/reviews">Оставить отзыв <ArrowUpRight size={15} /></Link></div>}</section>;
+  if (!reviews.length) return <section className="question-strip" data-testid="testimonial-section"><div><h2>Остались вопросы?</h2><p>{isLoading ? 'Помогу выбрать первую игру и разобраться в формате.' : 'Напишите мне в Telegram — обсудим опыт, пожелания и ближайшие встречи.'}</p></div><a href="https://t.me/mad_maze_elle" target="_blank" rel="noreferrer" className="button button-ghost">Задать вопрос</a></section>;
+  return <section className="section reviews-section" data-testid="testimonial-section"><div className="section-kicker">Отзывы с разрешением на публикацию</div><h2>Истории игроков</h2><div className="reviews-grid">{reviews.slice(0, 3).map((review) => <article className="review-card" key={review.id}><p>«{review.review}»</p><footer>— {review.name}{review.game ? ' · ' + review.game : ''}</footer></article>)}</div><Link href="/reviews">Оставить отзыв →</Link></section>;
 }
 
 function LandingPage({ page }: { page: LandingPageConfig }) {
@@ -719,14 +732,14 @@ function Home() {
           <div className="hero-copy reveal">
             <div className="eyebrow">авторские ролевые игры · москва / онлайн</div>
             <h1>Истории,<br /><em>в которые</em><br />входят</h1>
-            <p className="hero-lead">Я — Никс. Веду камерные игры для тех, кому мало просто бросить кубик. Здесь у каждого решения есть цена, у каждого героя — тайна, а у каждой встречи — продолжение.</p>
+            <p className="hero-lead">Настольные ролевые игры с мастером Никс — очно в Москве и онлайн. Можно без опыта: помогу разобраться в правилах и создать персонажа.</p>
             <div className="hero-actions">
-              <Link href="/calendar" className="button button-primary" data-testid="button-hero-calendar">Посмотреть расписание <ArrowUpRight size={16} /></Link>
-              <Link href="/games" className="button button-ghost" data-testid="button-hero-games">Подобрать игру</Link>
+              <Link href="/calendar?format=offline" className="button button-primary" data-testid="button-hero-calendar">Найти игру в Москве <ArrowUpRight size={16} /></Link>
+              <Link href="/calendar?format=online" className="button button-ghost" data-testid="button-hero-games">Играть онлайн</Link>
             </div>
             <div className="hero-note">
               <span><Check size={14} color="#d8ff55" /> Новичкам можно</span>
-              <span><Check size={14} color="#d8ff55" /> 18+ и бережная группа</span>
+              <span><Check size={14} color="#d8ff55" /> Условия и места — в карточках игр</span>
             </div>
           </div>
           <div className="hero-art reveal delay-1">
@@ -734,33 +747,28 @@ function Home() {
             <span className="orb two">+1</span>
             <img className="hero-character" src="/assets/nyx-cutout.webp" alt="Мадмуазель Никс за игровым столом" fetchPriority="high" decoding="async" data-testid="img-nyx-hero" />
           </div>
-          <span className="scroll-tag">листай, если готова</span>
+          <span className="scroll-tag">ваша история начинается здесь</span>
         </section>
 
-        <div className="signal-strip" data-testid="trust-signals">
-          <div className="signal"><span className="signal-icon">01</span><span><strong>5 лет</strong><br />веду игры</span></div>
-          <div className="signal"><span className="signal-icon">06</span><span><strong>игроков</strong><br />в одной группе</span></div>
-          <div className="signal"><span className="signal-icon">∞</span><span><strong>100%</strong><br />живых решений</span></div>
-          <div className="signal"><ArrowUpRight className="signal-icon" size={17} aria-hidden="true" /><span><strong>Москва</strong><br />и любой экран</span></div>
-        </div>
-
         <NextGameSection />
+
+        <FormatsSection />
 
         <CatalogSection id="games" />
 
         <section className="section" id="about" data-testid="about-section">
           <div className="path-grid">
-            <div className="path-copy"><div className="section-kicker">как это работает</div><h2>Не нужно<br />знать всё</h2><p>Не читала Player’s Handbook? Отлично. Я объясню правила, помогу собрать персонажа и позабочусь, чтобы за столом было место и для смелости, и для тишины.</p><Link href="/anketa" className="button button-ghost" style={{ marginTop: '18px' }} data-testid="button-about-apply">Рассказать о себе <ArrowUpRight size={15} /></Link></div>
+            <div className="path-copy"><div className="section-kicker">как это работает</div><h2>Не нужно<br />знать всё</h2><p>Правила пока незнакомы? Начнём с основ. Я объясню правила, помогу собрать персонажа и позабочусь, чтобы за столом было место и для смелости, и для тишины.</p><Link href="/anketa" className="button button-ghost" style={{ marginTop: '18px' }} data-testid="button-about-apply">Рассказать о себе <ArrowUpRight size={15} /></Link><Link href="/novichkam" className="format-details">Первый раз? Памятка для новичков →</Link></div>
             <div className="path-steps">
-              <div className="path-step"><span className="step-number">01</span><div><h3>Выбираешь мир</h3><p>Фэнтези, готический ужас, сказка или неон. В календаре есть игры для разного опыта и настроения.</p></div></div>
-              <div className="path-step"><span className="step-number">02</span><div><h3>Заполняешь анкету</h3><p>Пять минут, чтобы понять, что тебе интересно. Никаких экзаменов на «правильного игрока».</p></div></div>
-              <div className="path-step"><span className="step-number">03</span><div><h3>Получаешь приглашение</h3><p>Я напишу тебе в Telegram, отвечу на вопросы и пришлю всё нужное до первой встречи.</p></div></div>
+              <div className="path-step"><span className="step-number">01</span><div><h3>Выберите встречу</h3><p>Фэнтези, готический ужас, сказка или неон. В календаре есть игры для разного опыта и настроения.</p></div></div>
+              <div className="path-step"><span className="step-number">02</span><div><h3>Заполните анкету</h3><p>Пять минут, чтобы понять, что вам интересно. Никаких экзаменов на «правильного игрока».</p></div></div>
+              <div className="path-step"><span className="step-number">03</span><div><h3>Получите приглашение</h3><p>Я напишу вам в Telegram, отвечу на вопросы и пришлю всё нужное до первой встречи.</p></div></div>
             </div>
           </div>
         </section>
 
         <section className="section" data-testid="gallery-section">
-          <div className="section-head"><div><div className="section-kicker">что остаётся за кадром</div><h2>Мир уже<br />ждёт тебя</h2></div><p className="section-intro">Карты, миниатюры, музыка, свечи и немного хаоса на столе. Всё, что помогает истории стать настоящей.</p></div>
+          <div className="section-head"><div><div className="section-kicker">что остаётся за кадром</div><h2>Мир уже<br />ждёт вас</h2></div><p className="section-intro">Карты, миниатюры, музыка, свечи и немного хаоса на столе. Всё, что помогает истории стать настоящей.</p></div>
           <div className="gallery-layout">
             <div className="gallery-main"><img src="/assets/table.jpg" alt="Игровой стол с картами и кубиками" loading="lazy" decoding="async" data-testid="img-gallery-table" /><span className="gallery-caption">Стол — тоже часть сюжета.</span></div>
             <div className="gallery-side">
@@ -774,7 +782,7 @@ function Home() {
         <ReviewsSection />
 
         <section className="section" id="faq" data-testid="faq-section">
-          <div className="section-head"><div><div className="section-kicker">вопросы перед входом</div><h2>Спросить<br />не стыдно</h2></div><p className="section-intro">Собрала то, о чём обычно спрашивают в первом сообщении. Если твоего вопроса здесь нет — напиши мне в анкете.</p></div>
+          <div className="section-head"><div><div className="section-kicker">вопросы перед входом</div><h2>Спросить<br />не стыдно</h2></div><p className="section-intro">Собрала то, о чём обычно спрашивают в первом сообщении. Если вашего вопроса здесь нет — напишите мне в Telegram.</p></div>
           <div className="faq-grid">{homeFaq.map((item) => <Faq key={item.question} question={item.question} answer={item.answer} />)}</div>
         </section>
       </main>
@@ -786,9 +794,9 @@ function Faq({ question, answer }: { question: string; answer: string }) {
   return <details className="faq-item"><summary data-testid={`faq-${question}`}>{question}</summary><p>{answer}</p></details>;
 }
 
-type CalendarView = 'month' | 'week';
+type CalendarView = 'list' | 'month' | 'week';
 
-function CalendarPage({ initialView = 'month' }: { initialView?: CalendarView }) {
+function CalendarPage({ initialView = 'list' }: { initialView?: CalendarView }) {
   const { events, games: upcomingGames, isLoading, isError, refetch } = useLiveGames();
   const catalogQuery = useCatalog();
   const catalogItems = catalogQuery.data?.items ?? [];
@@ -796,7 +804,10 @@ function CalendarPage({ initialView = 'month' }: { initialView?: CalendarView })
   const [view, setView] = useState<CalendarView>(initialView);
   const [monthStart, setMonthStart] = useState(() => startOfMonth(today));
   const [weekStart, setWeekStart] = useState(() => startOfWeek(today));
-  const [formatFilter, setFormatFilter] = useState('all');
+  const search = useSearch();
+  const requestedFormat = new URLSearchParams(search).get('format');
+  const [formatFilter, setFormatFilter] = useState(requestedFormat === 'online' || requestedFormat === 'offline' ? requestedFormat : 'all');
+  useEffect(() => { setFormatFilter(requestedFormat === 'online' || requestedFormat === 'offline' ? requestedFormat : 'all'); }, [requestedFormat]);
   const [storyFilter, setStoryFilter] = useState('all');
   const [beginnersOnly, setBeginnersOnly] = useState(false);
   const [detailsGame, setDetailsGame] = useState<Game | null>(null);
@@ -821,9 +832,10 @@ function CalendarPage({ initialView = 'month' }: { initialView?: CalendarView })
     const experience = game.experience.toLowerCase();
     const formatMatches = formatFilter === 'all' || (formatFilter === 'online' ? normalizedFormat.includes('online') : normalizedFormat.includes('offline'));
     const storyMatches = storyFilter === 'all' || game.storyType === storyFilter;
-    const beginnerMatches = !beginnersOnly || !experience || /нович|любой|начин/.test(experience);
-    return formatMatches && storyMatches && beginnerMatches;
+    const beginnerMatches = !beginnersOnly || /нович|любой|начин/.test(experience);
+    return !calendarOnlyStatuses.has(game.status) && formatMatches && storyMatches && beginnerMatches;
   });
+  const openGames = filterGames(upcomingGames).filter(hasOpenSeats);
   const monthStartDate = monthGridStart(monthStart);
   const monthEndDate = monthGridEnd(monthStart);
   const monthGames = useMemo(() => filterGames(expandEvents(events, monthStartDate, monthEndDate)), [beginnersOnly, events, formatFilter, monthEndDate, monthStartDate, storyFilter]);
@@ -862,12 +874,13 @@ function CalendarPage({ initialView = 'month' }: { initialView?: CalendarView })
       <main className={`subpage calendar-page${view === 'week' ? ' is-week-view' : ''}`}>
         <div className="calendar-hero reveal">
           <div className="eyebrow">единый календарь игр</div>
-          <h1>{view === 'month' ? <>Весь месяц<br /><em>перед глазами</em></> : <>Неделя<br /><em>перед глазами</em></>}</h1>
-          <p>Здесь собраны открытые наборы, текущие кампании, детские группы, выходные и свободные слоты. Не нашли подходящую дату — <Link href="/anketa">оставьте пожелания</Link>.</p>
+          <h1>{view === 'list' ? <>Игры со<br /><em>свободными местами</em></> : view === 'month' ? <>Весь месяц<br /><em>перед глазами</em></> : <>Неделя<br /><em>перед глазами</em></>}</h1>
+          <p>Выберите ближайшую встречу. Время московское; цена указана за человека за встречу. Не нашли подходящую дату — <Link href="/anketa">оставьте пожелания</Link>.</p>
         </div>
         <div className="calendar-view-switch" role="tablist" aria-label="Вид календаря">
-          <Link href="/calendar" role="tab" aria-selected={view === 'month'} className={view === 'month' ? 'is-active' : ''} onClick={() => setView('month')}>Месяц</Link>
-          <Link href="/calendar/week" role="tab" aria-selected={view === 'week'} className={view === 'week' ? 'is-active' : ''} onClick={() => setView('week')}>Неделя</Link>
+          <button type="button" role="tab" aria-selected={view === 'list'} className={view === 'list' ? 'is-active' : ''} onClick={() => setView('list')}>Игры со свободными местами</button>
+          <button type="button" role="tab" aria-selected={view === 'month'} className={view === 'month' ? 'is-active' : ''} onClick={() => setView('month')}>Месяц</button>
+          <button type="button" role="tab" aria-selected={view === 'week'} className={view === 'week' ? 'is-active' : ''} onClick={() => setView('week')}>Неделя</button>
         </div>
         {isLoading && <div className="calendar-state" role="status">Загружаем расписание…</div>}
         {isError && <div className="calendar-state" role="alert"><h2>Календарь временно недоступен</h2><p>Не удалось получить актуальные даты. Попробуйте обновить список.</p><button className="button button-primary" onClick={() => refetch()}>Обновить календарь</button></div>}
@@ -877,7 +890,7 @@ function CalendarPage({ initialView = 'month' }: { initialView?: CalendarView })
             <label><span>Длина истории</span><select value={storyFilter} onChange={(event) => setStoryFilter(event.target.value)}><option value="all">Ваншоты и кампании</option><option value="oneshot">Ваншот — одна встреча</option><option value="campaign">Кампания — серия встреч</option></select></label>
             <label className="calendar-check"><input type="checkbox" checked={beginnersOnly} onChange={(event) => setBeginnersOnly(event.target.checked)} /><span>Подходит новичкам</span></label>
           </div>
-          {view === 'month' ? <section className="calendar-week" aria-labelledby="calendar-month-title">
+          {view === 'list' ? <section aria-label="Открытые наборы">{openGames.length ? <div className="open-games-grid">{openGames.map((game) => <OpenGameCard key={game.id} game={game} onDetails={setDetailsGame} />)}</div> : <div className="calendar-state"><h2>Подходящих открытых игр пока нет</h2><p>В ближайшие 90 дней нет встреч по выбранным условиям. Измените фильтры или оставьте пожелания в анкете.</p><Link href="/anketa" className="button button-ghost">Помогите подобрать игру</Link></div>}</section> : view === 'month' ? <section className="calendar-week" aria-labelledby="calendar-month-title">
             <div className="calendar-week-toolbar"><div><h2 id="calendar-month-title">{monthLabel(monthStart)}</h2><p>Время московское · открытые наборы и ближайшие встречи</p></div><div className="calendar-week-nav" aria-label="Навигация по месяцам"><button type="button" onClick={() => moveMonth(-1)} aria-label="Предыдущий месяц">←</button><button type="button" className="calendar-week-current" onClick={showToday}>Сегодня</button><button type="button" onClick={() => moveMonth(1)} aria-label="Следующий месяц">→</button></div></div>
             <div className="calendar-week-meta"><span>{monthLabel(monthStart)}</span><strong>В расписании: {scheduledCount}</strong></div>
             <div className="calendar-month-scroll" role="grid" aria-label={`Календарь на ${monthLabel(monthStart)}`}><div className="calendar-month-weekdays" aria-hidden="true">{weekDayLabels.map((label) => <span key={label}>{label}</span>)}</div><div className="calendar-month-grid">{monthGrid.map((day) => <section className={`calendar-month-day${day.date === today ? ' is-today' : ''}${day.date < today ? ' is-past' : ''}${day.date.slice(0, 7) !== monthStart.slice(0, 7) ? ' is-other-month' : ''}${day.games.some((game) => game.status === 'day_off') ? ' has-day-off' : ''}`} role="gridcell" aria-label={formatDate(day.date)} key={day.date}><header><span>{parseDateKey(day.date).getUTCDate()}</span></header><div>{day.games.slice(0, 3).map((game) => <MonthGame game={game} key={game.id} onSelect={setDetailsGame} />)}{day.games.length > 3 && <button type="button" className="calendar-month-more" onClick={() => setOverflowDay({ date: day.date, games: day.games.slice(3) })}>+{day.games.length - 3} ещё</button>}</div></section>)}</div></div>
@@ -887,7 +900,7 @@ function CalendarPage({ initialView = 'month' }: { initialView?: CalendarView })
             <div className="calendar-week-grid-scroll"><div className="calendar-week-grid">{weekDays.map((day) => <section className={`calendar-day${day.date === today ? ' is-today' : ''}${day.date < today ? ' is-past' : ''}${day.games.some((game) => game.status === 'day_off') ? ' has-day-off' : ''}`} key={day.date} aria-labelledby={`calendar-day-${day.date}`}><header className="calendar-day-head"><div><span>{day.label}</span><strong>{parseDateKey(day.date).getUTCDate()}</strong></div><small id={`calendar-day-${day.date}`}>{day.name}</small></header><div className="calendar-day-body">{day.games.length ? day.games.map((game) => <WeeklyGame game={game} key={game.id} onSelect={setDetailsGame} />) : <p className="calendar-day-empty">Свободный день</p>}</div></section>)}</div></div>
           </section>}
         </>}
-        {!isLoading && !isError && <section className="calendar-actions-bottom" aria-label="Действия с расписанием" data-testid="calendar-bottom-actions"><div><span className="catalog-kicker">СЛЕДУЮЩИЙ ШАГ</span><h2>Нашли свой слот?</h2><p>Запишитесь на открытую игру или добавьте новую встречу в мастерском календаре.</p></div><div className="calendar-actions-buttons"><Link href="/anketa" className="button button-primary">Записаться на игру <ArrowUpRight size={15} /></Link><Link href="/master/calendar" className="button button-ghost">Добавить игру <ArrowUpRight size={15} /></Link></div></section>}
+        {!isLoading && !isError && <section className="calendar-actions-bottom" aria-label="Действия с расписанием" data-testid="calendar-bottom-actions"><div><span className="catalog-kicker">СЛЕДУЮЩИЙ ШАГ</span><h2>Нашли свой слот?</h2><p>Оставьте заявку на встречу или попросите помочь с выбором.</p></div><div className="calendar-actions-buttons"><Link href="/anketa" className="button button-primary">Записаться на игру <ArrowUpRight size={15} /></Link></div></section>}
       </main>
       {detailsGame && createPortal(<GameDetailsDialog game={detailsGame} catalogItem={detailsCatalogItem} onClose={() => setDetailsGame(null)} />, document.body)}
       {overflowDay && createPortal(<CalendarMonthOverflowDialog date={overflowDay.date} games={overflowDay.games} onSelect={(game) => { setOverflowDay(null); setDetailsGame(game); }} onClose={() => setOverflowDay(null)} />, document.body)}
@@ -923,7 +936,7 @@ function WeeklyGame({ game, onSelect }: { game: Game; onSelect: (game: Game) => 
         <span className="calendar-event-top"><time>{game.time}</time><span>{availabilityLabel(game)}</span></span>
         <span className="calendar-event-title">{game.title}</span>
         {details && <span className="calendar-event-place">{details}</span>}
-        {game.price && game.status !== 'day_off' && <span className="calendar-event-price">{game.price}</span>}
+        {game.price && game.status !== 'day_off' && <span className="calendar-event-price">{meetingPrice(game.price)}</span>}
       </button>
       {canApply(game) && !isPast && <Link href={`/anketa?event=${encodeURIComponent(game.eventId)}&date=${encodeURIComponent(game.dateISO)}`} className="calendar-event-action">{game.status === 'waiting' ? 'Лист ожидания' : 'Оставить заявку'} <ArrowUpRight size={13} /></Link>}
       {game.status === 'open_slot' && !isPast && <Link href="/anketa" className="calendar-event-action">Обсудить игру <ArrowUpRight size={13} /></Link>}
@@ -940,12 +953,13 @@ function GameDetailsDialog({ game, catalogItem, onClose }: { game: Game; catalog
     ['Тип', gameTypeLabel(game.gameType)],
     ['Статус', gameStatusLabel(game)],
     ['Дата', formatDate(game.dateISO)],
-    ['Время', game.time === '—' ? 'Не указано' : game.time],
+    ['Время', game.time === '—' ? 'Не указано' : game.time + ' МСК'],
     ['Система', game.system],
-    ['Формат', catalogItem ? catalogFormatLabel(catalogItem.format) : game.format ? catalogFormatLabel(game.format) : ''],
+    ['Формат', game.format ? catalogFormatLabel(game.format) : ''],
     ['Место', game.place],
-    ['Цена', catalogItem?.price || game.price],
-    ['Возраст', catalogItem?.age || game.age],
+    ['Цена', meetingPrice(game.price)],
+    ...(game.format === 'offline' ? [['Дополнительно', 'Антикафе оплачивается отдельно']] as [string, string][] : []),
+    ['Возраст', game.age || catalogItem?.age || 'Уточняется'],
     ['Опыт', game.experience],
     ['Места', formatSpots(game.seats)],
     ['Длительность', game.duration],
@@ -1040,6 +1054,7 @@ function ApplicationPage() {
     website: '',
   });
   const selectedGame: GameSelection | undefined = selectionQuery.data?.game;
+  const selectedFormat = games.find((game) => game.eventId === selectedGame?.id)?.format;
 
   useEffect(() => {
     if (eventId && occurrenceDate) {
@@ -1060,10 +1075,11 @@ function ApplicationPage() {
       setForm((current) => ({
         ...current,
         game: selectedGame.title,
-        schedule: current.schedule || `${selectedGame.dateLabel}, ${selectedGame.time}`,
+        schedule: `${selectedGame.dateLabel}, ${selectedGame.time} МСК`,
+        place: selectedFormat === 'offline' ? 'Очно в Москве' : selectedFormat === 'online' ? 'Онлайн' : current.place,
       }));
     }
-  }, [selectedGame]);
+  }, [selectedGame, selectedFormat]);
 
   useEffect(() => {
     if (!selectedGame && requestedGame) {
@@ -1157,7 +1173,7 @@ function ApplicationPage() {
       contact: form.contact.trim(),
       players,
       format: form.format,
-      place: selectedGame ? selectedGame.place : form.place,
+      place: form.place,
       experience: form.experience,
       system: form.system || (selectedGame ? selectedGame.title : form.game),
       genres: form.genres,
@@ -1189,23 +1205,23 @@ function ApplicationPage() {
   return (
     <Shell>
       <main className="subpage">
-        <div className="subpage-head reveal"><div className="eyebrow">первый шаг</div><h1>Вход<br />в <em style={{ color: '#ff716a', fontStyle: 'normal' }}>историю</em></h1><p className="subpage-lead">Расскажи, что ищешь за игровым столом. Анкета ни к чему не обязывает — она помогает мне собрать хорошую группу, где всем будет интересно.</p></div>
+        <div className="subpage-head reveal"><div className="eyebrow">первый шаг</div><h1>Вход<br />в <em style={{ color: '#ff716a', fontStyle: 'normal' }}>историю</em></h1><p className="subpage-lead">Расскажите, что ищете за игровым столом. Анкета ни к чему не обязывает — она помогает мне собрать хорошую группу, где всем будет интересно.</p></div>
         <div className="form-layout">
            <aside className="form-aside"><div className="section-kicker">Что будет дальше</div><p>Я проверю заявку, уточню детали и свяжусь по указанному контакту, чтобы обсудить игру и формат.</p><p>Можно написать с нулевым опытом, с готовым персонажем или с идеей, которую давно хочется сыграть.</p><img src="/assets/table.jpg" alt="Игровой стол с кубиками и листами персонажей" loading="lazy" decoding="async" data-testid="img-application-aside" /></aside>
            <div className="form-card">
-              {sent ? <div className="success-card" data-testid="application-success"><Check size={25} color="#d8ff55" /><h2>Заявка сохранена</h2><p>Спасибо, {form.name}. Заявка добавлена в список новых обращений. Я проверю её и свяжусь с вами по указанному контакту.</p><div className="hero-actions"><a href="https://t.me/mad_maze_elle" target="_blank" rel="noreferrer" className="button button-primary" data-testid="button-success-telegram">Открыть контакт <ArrowUpRight size={15} /></a><Link href="/calendar" className="button button-ghost" data-testid="button-success-calendar">Посмотреть календарь <ArrowUpRight size={15} /></Link></div></div> : <form onSubmit={submit} data-testid="application-form">
+              {sent ? <div className="success-card" data-testid="application-success"><Check size={25} color="#d8ff55" /><h2>Заявка сохранена</h2><p>Спасибо, {form.name}. Заявка добавлена в список новых обращений. Я напишу вам в Telegram по указанному контакту, уточню детали и подтвержу место. Пока подтверждение не пришло, запись предварительная.</p><div className="hero-actions"><a href="https://t.me/mad_maze_elle" target="_blank" rel="noreferrer" className="button button-primary" data-testid="button-success-telegram">Открыть контакт <ArrowUpRight size={15} /></a><Link href="/calendar" className="button button-ghost" data-testid="button-success-calendar">Посмотреть календарь <ArrowUpRight size={15} /></Link></div></div> : <form onSubmit={submit} data-testid="application-form">
                 <div className="form-card-head"><div><span className="section-kicker">короткая анкета</span><h2>{selectedGame ? <>Заявка<br />на игру</> : <>Пара вопросов<br />перед броском</>}</h2></div><div className="form-step-indicator" aria-label={`Шаг ${step} из 2`}><span className={step === 1 ? 'is-active' : ''}>01<br /><small>контакт</small></span><i aria-hidden="true" /><span className={step === 2 ? 'is-active' : ''}>02<br /><small>детали</small></span></div></div>
                 {selectionQuery.isLoading && <div className="form-status" role="status">Проверяю выбранную игру…</div>}
                 {selectionQuery.isError && <div className="form-status error" role="alert">Не удалось проверить выбранную игру. Вернитесь в календарь и выберите актуальную дату.</div>}
-                {selectedGame && <div className="selected-game" data-testid="selected-game"><span className="section-kicker">Вы выбрали</span><strong>{selectedGame.title}</strong><span>{selectedGame.dateLabel} · {selectedGame.time} · {selectedGame.place}</span><small>{selectedGame.price} · {selectedGame.location}</small></div>}
+                {selectedGame && <div className="selected-game" data-testid="selected-game"><span className="section-kicker">Вы выбрали</span><strong>{selectedGame.title}</strong><span>{selectedGame.dateLabel} · {selectedGame.time} · {selectedGame.place}</span><small>{meetingPrice(selectedGame.price)} · {form.place}</small></div>}
                  {step === 1 ? <>
-                   <div className="field-grid" data-testid="form-step-1"><div className="field"><label htmlFor="name">Как тебя зовут *</label><input id="name" value={form.name} onChange={(event) => update('name', event.target.value)} placeholder="Имя или ник" required data-testid="input-name" /></div><div className="field"><label htmlFor="telegram">Telegram *</label><input id="telegram" value={form.contact} onChange={(event) => update('contact', event.target.value)} placeholder="@username" required data-testid="input-telegram" /></div>{!selectedGame && <div className="field"><label htmlFor="game">Какая игра интересует *</label><select id="game" value={gameChoice} onChange={(event) => selectGame(event.target.value)} disabled={isGamesLoading || catalogQuery.isLoading} required data-testid="select-game"><option value="custom">Хочу обсудить свою идею</option>{catalogItems.map((item) => <option key={`catalog-${item.id}`} value={`catalog:${item.id}`}>{item.title} · {catalogSystem(item.systemKey).title}</option>)}{games.filter(canApply).map((game) => <option key={`${game.id}-${game.dateISO}`} value={`event:${game.eventId}:${game.dateISO}`}>{game.title} · {game.date}</option>)}{!['custom', ...catalogItems.map((item) => `catalog:${item.id}`), ...games.filter(canApply).map((game) => `event:${game.eventId}:${game.dateISO}`)].includes(gameChoice) && form.game !== 'Подобрать игру вместе' && <option value={gameChoice}>{form.game}</option>}</select></div>}<div className="field"><label htmlFor="place">Формат участия</label><select id="place" value={form.place} onChange={(event) => update('place', event.target.value)}><option>Онлайн</option><option>Очно в Москве</option><option>Готовы обсудить</option></select></div><div className="field full"><label htmlFor="schedule">Когда удобно играть *</label><textarea id="schedule" value={form.schedule} onChange={(event) => update('schedule', event.target.value)} placeholder="Дни недели, время, желаемая частота" required /></div></div>
+                   <div className="field-grid" data-testid="form-step-1"><div className="field"><label htmlFor="name">Как вас зовут *</label><input id="name" value={form.name} onChange={(event) => update('name', event.target.value)} placeholder="Имя или ник" required data-testid="input-name" /></div><div className="field"><label htmlFor="telegram">Telegram *</label><input id="telegram" value={form.contact} onChange={(event) => update('contact', event.target.value)} placeholder="@username" required data-testid="input-telegram" /></div>{!selectedGame && <div className="field"><label htmlFor="game">Какая игра интересует *</label><select id="game" value={gameChoice} onChange={(event) => selectGame(event.target.value)} disabled={isGamesLoading || catalogQuery.isLoading} required data-testid="select-game"><option value="custom">Помогите подобрать игру</option>{catalogItems.map((item) => <option key={`catalog-${item.id}`} value={`catalog:${item.id}`}>{item.title} · {catalogSystem(item.systemKey).title}</option>)}{games.filter(canApply).map((game) => <option key={`${game.id}-${game.dateISO}`} value={`event:${game.eventId}:${game.dateISO}`}>{game.title} · {game.date}</option>)}{!['custom', ...catalogItems.map((item) => `catalog:${item.id}`), ...games.filter(canApply).map((game) => `event:${game.eventId}:${game.dateISO}`)].includes(gameChoice) && form.game !== 'Подобрать игру вместе' && <option value={gameChoice}>{form.game}</option>}</select></div>}<div className="field"><label htmlFor="place">Формат участия</label><select id="place" disabled={Boolean(selectedGame && games.some((game) => game.eventId === selectedGame.id && ['online', 'offline'].includes(game.format)))} value={form.place} onChange={(event) => update('place', event.target.value)}><option>Онлайн</option><option>Очно в Москве</option><option>Готовы обсудить</option></select></div>{!selectedGame && <div className="field full"><label htmlFor="schedule">Когда удобно играть *</label><textarea id="schedule" value={form.schedule} onChange={(event) => update('schedule', event.target.value)} placeholder="Дни недели, время, желаемая частота" required /></div>}</div>
                   {stepError && <div className="form-status error" role="alert">{stepError}</div>}
                   <div className="form-step-actions form-step-actions-next"><button className="button button-primary" type="button" onClick={goToSecondStep} data-testid="button-next-step">Дальше: детали <ArrowUpRight size={15} /></button></div>
                 </> : <>
-                  <div className="field-grid" data-testid="form-step-2"><div className="field"><label htmlFor="players">Сколько будет игроков *</label><input id="players" type="number" min="1" max="20" value={form.players} onChange={(event) => update('players', event.target.value)} required data-testid="input-players" /></div><div className="field"><label htmlFor="format">Тип игры</label><select id="format" value={form.format} onChange={(event) => update('format', event.target.value)}><option>Ваншот на одну встречу</option><option>Небольшое приключение</option><option>Долгая кампания</option><option>Пока не знаю</option></select></div><div className="field"><label htmlFor="experience">Игровой опыт</label><input id="experience" value={form.experience} onChange={(event) => update('experience', event.target.value)} placeholder="Например: совсем новичок или играю 3 года" /></div><div className="field"><label htmlFor="system">Система или жанр</label><input id="system" value={form.system} onChange={(event) => update('system', event.target.value)} placeholder="Например: D&D 5e, мистика, хоррор" /></div><div className="field"><label htmlFor="genres">Любимые жанры</label><input id="genres" value={form.genres} onChange={(event) => update('genres', event.target.value)} placeholder="Фэнтези, хоррор, детектив…" /></div><div className="field"><label htmlFor="tone">Желаемый тон</label><input id="tone" value={form.tone} onChange={(event) => update('tone', event.target.value)} placeholder="Больше драмы, юмора или экшена" /></div><div className="field full"><label htmlFor="wishes">Что хочется получить от игры</label><textarea id="wishes" value={form.wishes} onChange={(event) => update('wishes', event.target.value)} placeholder="Больше драмы? Исследований? Дурацких шуток в опасном подземелье?" /></div><div className="field full"><label htmlFor="boundaries">Границы и дополнительные детали</label><textarea id="boundaries" value={form.boundaries} onChange={(event) => update('boundaries', event.target.value)} placeholder="Темы, которых лучше избегать, или всё, что важно знать заранее" /></div></div>
+                  <div className="field-grid" data-testid="form-step-2"><div className="field"><label htmlFor="players">Сколько будет игроков *</label><input id="players" type="number" min="1" max="20" value={form.players} onChange={(event) => update('players', event.target.value)} required data-testid="input-players" /></div><div className="field"><label htmlFor="format">Тип игры</label><select id="format" value={form.format} onChange={(event) => update('format', event.target.value)}><option>Ваншот на одну встречу</option><option>Небольшое приключение</option><option>Долгая кампания</option><option>Пока не знаю</option></select></div><div className="field"><label htmlFor="experience">Игровой опыт</label><input id="experience" value={form.experience} onChange={(event) => update('experience', event.target.value)} placeholder="Например: совсем новичок или играю 3 года" /></div><div className="field"><label htmlFor="system">Система или жанр</label><input id="system" list="system-suggestions" value={form.system} onChange={(event) => update('system', event.target.value)} placeholder="Не знаю систему — помогите выбрать" /><datalist id="system-suggestions"><option value="Не знаю систему — помогите выбрать" />{catalogGroups.map((group) => <option key={group.slug} value={group.title} />)}</datalist></div><div className="field"><label htmlFor="genres">Любимые жанры</label><input id="genres" value={form.genres} onChange={(event) => update('genres', event.target.value)} placeholder="Фэнтези, хоррор, детектив…" /></div><div className="field"><label htmlFor="tone">Желаемый тон</label><input id="tone" value={form.tone} onChange={(event) => update('tone', event.target.value)} placeholder="Больше драмы, юмора или экшена" /></div><div className="field full"><label htmlFor="wishes">Что хочется получить от игры</label><textarea id="wishes" value={form.wishes} onChange={(event) => update('wishes', event.target.value)} placeholder="Больше драмы? Исследований? Дурацких шуток в опасном подземелье?" /></div><div className="field full"><label htmlFor="boundaries">Границы и дополнительные детали</label><textarea id="boundaries" value={form.boundaries} onChange={(event) => update('boundaries', event.target.value)} placeholder="Темы, которых лучше избегать, или всё, что важно знать заранее" /></div></div>
                   <div className="form-honeypot" aria-hidden="true"><label htmlFor="website">Не заполняйте это поле</label><input id="website" name="website" value={form.website} onChange={(event) => update('website', event.target.value)} tabIndex={-1} autoComplete="off" /></div>
-                  <label className="consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} required /><span>Я согласна на обработку ответов и контакта для обсуждения игры. <Link href="/privacy">Политика данных</Link> · <Link href="/terms">Условия</Link></span></label>
+                  <label className="consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} required /><span>Даю согласие на обработку ответов и контакта для обсуждения игры. <Link href="/privacy">Политика данных</Link> · <Link href="/terms">Условия</Link></span></label>
                   {stepError && <div className="form-status error" role="alert">{stepError}</div>}
                   {submitError && <div className="form-status error" role="alert">{submitError} Можно <a href="https://t.me/mad_maze_elle" target="_blank" rel="noreferrer">написать мастеру в Telegram</a>.</div>}
                   <div className="form-step-actions"><button className="button button-ghost" type="button" onClick={goToFirstStep} data-testid="button-prev-step">Назад</button><button className="button button-primary" type="submit" disabled={submitMutation.isPending || selectionQuery.isLoading || Boolean(selectionQuery.isError) || !consent} data-testid="button-submit-application">{submitMutation.isPending ? 'Отправляю…' : 'Отправить заявку'} <ArrowUpRight size={15} /></button></div>
@@ -1261,7 +1277,7 @@ function LegalPage({ kind }: { kind: LegalPageKind }) {
 const pageMeta: Record<string, { title: string; description: string }> = {
   '/': {
     title: 'Мадмуазель Никс — настольные ролевые игры онлайн и в Москве',
-    description: 'Ваншоты и кампании для новичков и опытных игроков. Онлайн и очно в Москве, группы 3–5 человек.',
+    description: 'Ваншоты и кампании для новичков и опытных игроков. Онлайн и очно в Москве. Условия участия указаны в карточке игры.',
   },
   '/calendar': {
     title: 'Календарь игр — Мадмуазель Никс',
@@ -1344,7 +1360,7 @@ function Router() {
   const search = useSearch();
   if (location === '/master' || location === '/master/' || location.startsWith('/master/')) return <MasterRoutes />;
   if (location === '/mini' || location === '/mini/') return <MiniApp />;
-  return <ErrorBoundary resetKey={`${location}?${search}`}><Seo /><RouteTransition><Switch><Route path="/" component={Home} /><Route path="/calendar/week" component={() => <CalendarPage initialView="week" />} /><Route path="/calendar" component={() => <CalendarPage initialView="month" />} /><Route path="/anketa" component={ApplicationPage} /><Route path="/games" component={GamesPage} /><Route path="/reviews" component={ReviewsPage} /><Route path="/dnd" component={() => <LandingPage page={landingPages.dnd} />} /><Route path="/vampire" component={() => <LandingPage page={landingPages.vampires} />} /><Route path="/daggerheart" component={() => <LandingPage page={landingPages.daggerheart} />} /><Route path="/cyberpunk" component={() => <LandingPage page={landingPages.cyberpunk} />} /><Route path="/novichkam" component={() => <LandingPage page={landingPages.beginners} />} /><Route path="/online" component={() => <LandingPage page={landingPages.online} />} /><Route path="/offline" component={() => <LandingPage page={landingPages.offline} />} /><Route path="/privacy" component={() => <LegalPage kind="privacy" />} /><Route path="/terms" component={() => <LegalPage kind="terms" />} /><Route path="/offer" component={() => <LegalPage kind="offer" />} /><Route path="/rules" component={() => <LegalPage kind="terms" />} /><Route component={NotFound} /></Switch></RouteTransition></ErrorBoundary>;
+  return <ErrorBoundary resetKey={`${location}?${search}`}><Seo /><RouteTransition><Switch><Route path="/" component={Home} /><Route path="/calendar/week" component={() => <CalendarPage initialView="week" />} /><Route path="/calendar" component={() => <CalendarPage initialView="list" />} /><Route path="/anketa" component={ApplicationPage} /><Route path="/games" component={GamesPage} /><Route path="/reviews" component={ReviewsPage} /><Route path="/dnd" component={() => <LandingPage page={landingPages.dnd} />} /><Route path="/vampire" component={() => <LandingPage page={landingPages.vampires} />} /><Route path="/daggerheart" component={() => <LandingPage page={landingPages.daggerheart} />} /><Route path="/cyberpunk" component={() => <LandingPage page={landingPages.cyberpunk} />} /><Route path="/novichkam" component={() => <LandingPage page={landingPages.beginners} />} /><Route path="/online" component={() => <LandingPage page={landingPages.online} />} /><Route path="/offline" component={() => <LandingPage page={landingPages.offline} />} /><Route path="/privacy" component={() => <LegalPage kind="privacy" />} /><Route path="/terms" component={() => <LegalPage kind="terms" />} /><Route path="/offer" component={() => <LegalPage kind="offer" />} /><Route path="/rules" component={() => <LegalPage kind="terms" />} /><Route component={NotFound} /></Switch></RouteTransition></ErrorBoundary>;
 }
 
 function App() {

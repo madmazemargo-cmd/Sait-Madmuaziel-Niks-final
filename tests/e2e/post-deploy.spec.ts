@@ -98,7 +98,7 @@ test('application form carries first-touch UTM values through submission', async
   await page.getByTestId('input-telegram').fill('@test_player');
   await page.getByLabel(/Когда удобно играть/).fill('Вечера по будням');
   await page.getByTestId('button-next-step').click();
-  await page.getByLabel('Я согласна на обработку ответов и контакта для обсуждения игры.').check();
+  await page.getByLabel('Даю согласие на обработку ответов и контакта для обсуждения игры.').check();
   await page.getByTestId('button-submit-application').click();
 
   await expect(page.getByTestId('application-success')).toBeVisible();
