@@ -346,6 +346,9 @@ function Header() {
         <span className="brand-mark">N</span>
         <span>МАДМУАЗЕЛЬ НИКС</span>
       </Link>
+      <Link href="/master" className="master-entry" onClick={close} aria-label="Кабинет мастера" data-testid="link-master-entry">
+        <span className="master-entry-full">Кабинет мастера</span><span className="master-entry-short" aria-hidden="true">Кабинет</span>
+      </Link>
       <button className="menu-button" type="button" onClick={() => setOpen((current) => !current)} aria-label={open ? 'Закрыть меню' : 'Открыть меню'} aria-expanded={open} aria-controls="main-navigation" data-testid="button-menu">
         {open ? <X size={17} aria-hidden="true" /> : <Menu size={17} aria-hidden="true" />}
       </button>
