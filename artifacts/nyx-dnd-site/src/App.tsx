@@ -55,7 +55,7 @@ type Game = {
   playerPrep: string;
 };
 
-const calendarOnlyStatuses = new Set(['day_off', 'children_group', 'open_slot']);
+const hiddenCalendarStatuses = new Set(['day_off', 'open_slot']);
 const weekDayLabels = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'];
 
 function storyTypeForEvent(event: CalendarEvent): 'campaign' | 'oneshot' {
@@ -846,7 +846,7 @@ function CalendarPage({ initialView = 'list' }: { initialView?: CalendarView }) 
     const formatMatches = formatFilter === 'all' || (formatFilter === 'online' ? normalizedFormat.includes('online') : normalizedFormat.includes('offline'));
     const storyMatches = storyFilter === 'all' || game.storyType === storyFilter;
     const beginnerMatches = !beginnersOnly || /нович|любой|начин/.test(experience);
-    return !calendarOnlyStatuses.has(game.status) && formatMatches && storyMatches && beginnerMatches;
+    return !hiddenCalendarStatuses.has(game.status) && formatMatches && storyMatches && beginnerMatches;
   });
   const openGames = firstMeetingPerSeries(filterGames(upcomingGames).filter(hasOpenSeats));
   const monthStartDate = monthGridStart(monthStart);
@@ -869,8 +869,8 @@ function CalendarPage({ initialView = 'list' }: { initialView?: CalendarView }) 
     const date = addDays(weekStart, index);
     return { date, label: weekDayLabels[index], name: formatDayName(date), games: weekGames.filter((game) => game.dateISO === date) };
   }), [weekGames, weekStart]);
-  const monthScheduledCount = monthGames.filter((game) => game.dateISO.slice(0, 7) === monthStart.slice(0, 7) && !calendarOnlyStatuses.has(game.status)).length;
-  const scheduledCount = view === 'month' ? monthScheduledCount : weekGames.filter((game) => !calendarOnlyStatuses.has(game.status)).length;
+  const monthScheduledCount = monthGames.filter((game) => game.dateISO.slice(0, 7) === monthStart.slice(0, 7) && !hiddenCalendarStatuses.has(game.status)).length;
+  const scheduledCount = view === 'month' ? monthScheduledCount : weekGames.filter((game) => !hiddenCalendarStatuses.has(game.status)).length;
   const detailsCatalogItem = detailsGame
     ? catalogItems.find((item) => item.id === detailsGame.catalogItemId)
       ?? catalogItems.find((item) => item.title.trim().toLocaleLowerCase('ru-RU') === detailsGame.title.trim().toLocaleLowerCase('ru-RU'))
@@ -903,6 +903,7 @@ function CalendarPage({ initialView = 'list' }: { initialView?: CalendarView }) 
             <label><span>Длина истории</span><select value={storyFilter} onChange={(event) => setStoryFilter(event.target.value)}><option value="all">Ваншоты и кампании</option><option value="oneshot">Ваншот — одна встреча</option><option value="campaign">Кампания — серия встреч</option></select></label>
             <label className="calendar-check"><input type="checkbox" checked={beginnersOnly} onChange={(event) => setBeginnersOnly(event.target.checked)} /><span>Подходит новичкам</span></label>
           </div>
+          {view === 'list' && <p className="calendar-view-note">Полное расписание, включая детские группы, показано в видах «Месяц» и «Неделя».</p>}
           {view === 'list' ? <section aria-label="Открытые наборы">{openGames.length ? <div className="open-games-grid">{openGames.map((game) => <OpenGameCard key={game.id} game={game} onDetails={setDetailsGame} />)}</div> : <div className="calendar-state"><h2>Подходящих открытых игр пока нет</h2><p>В ближайшие 90 дней нет встреч по выбранным условиям. Измените фильтры или оставьте пожелания в анкете.</p><Link href="/anketa" className="button button-ghost">Помогите подобрать игру</Link></div>}</section> : view === 'month' ? <section className="calendar-week" aria-labelledby="calendar-month-title">
             <div className="calendar-week-toolbar"><div><h2 id="calendar-month-title">{monthLabel(monthStart)}</h2><p>Время московское · открытые наборы и ближайшие встречи</p></div><div className="calendar-week-nav" aria-label="Навигация по месяцам"><button type="button" onClick={() => moveMonth(-1)} aria-label="Предыдущий месяц">←</button><button type="button" className="calendar-week-current" onClick={showToday}>Сегодня</button><button type="button" onClick={() => moveMonth(1)} aria-label="Следующий месяц">→</button></div></div>
             <div className="calendar-week-meta"><span>{monthLabel(monthStart)}</span><strong>В расписании: {scheduledCount}</strong></div>

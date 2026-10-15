@@ -59,6 +59,17 @@
 .calendar-view-switch button { min-height: 40px; border: 1px solid transparent; border-bottom: 2px solid transparent; font-weight: 800; }
 .button { min-height: 44px; }
 .field select:disabled { opacity: .8; }
+.calendar-view-note { color: #b5a8b8; font-size: 12px; line-height: 1.6; margin: 0 0 22px; }
+.calendar-page.is-week-view { width: 100%; max-width: none; left: auto; margin-left: 0; transform: none; }
+.calendar-page.is-week-view .calendar-week-grid-scroll { width: 100%; overflow: visible; margin: 0; padding: 0; }
+.calendar-page.is-week-view .calendar-week-grid { grid-template-columns: minmax(0, 1fr); min-width: 0; min-height: 0; }
+.calendar-page.is-week-view .calendar-day { display: grid; grid-template-columns: 148px minmax(0, 1fr); }
+.calendar-page.is-week-view .calendar-day-head { display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; gap: 12px; padding: 18px; min-height: 0; border-bottom: 0; border-right: 1px solid #44344a; }
+.calendar-page.is-week-view .calendar-day-head > div { justify-content: space-between; }
+.calendar-page.is-week-view .calendar-day-head strong { font-size: 32px; }
+.calendar-page.is-week-view .calendar-day-head small { text-align: left; }
+.calendar-page.is-week-view .calendar-day-body { min-height: 0; gap: 10px; padding: 14px; }
+.calendar-page.is-week-view .calendar-day-empty { margin: 8px 0; text-align: left; }
 @media (max-width: 1100px) {
   .open-games-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -71,4 +82,9 @@
   .footer-links { gap: 14px; }
   .footer-links a + a::before { content: none; }
   .calendar-view-switch button { width: 100%; text-align: left; }
+  .calendar-page.is-week-view .calendar-day { grid-template-columns: minmax(0, 1fr); }
+  .calendar-page.is-week-view .calendar-day-head { flex-direction: row; align-items: center; justify-content: space-between; border-right: 0; border-bottom: 1px solid #44344a; padding: 12px; }
+  .calendar-page.is-week-view .calendar-day-head > div { gap: 12px; }
+  .calendar-page.is-week-view .calendar-day-head strong { font-size: 25px; }
+  .calendar-page.is-week-view .calendar-day-body { padding: 10px; }
 }

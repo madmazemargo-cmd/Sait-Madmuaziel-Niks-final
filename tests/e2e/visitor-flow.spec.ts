@@ -119,3 +119,33 @@ test('desktop grid aligns prices; mobile stays within viewport', async ({ page }
   const footer = page.getByTestId('site-footer');
   await expect(footer.getByRole('link')).toHaveText(['Telegram', 'Discord', 'Оферта', 'Политика конфиденциальности']);
 });
+
+test('children groups appear in the full calendar and the week runs vertically at every screen size', async ({ page }) => {
+  await page.route('**/api/calendar', route => route.fulfill({ json: { events: [event, {
+    ...event, id: 'children', title: 'Детская группа', status: 'children_group', seats: null,
+    eventDate: '2020-01-01', recurrence: 'daily', format: '', age: '', price: '',
+  }] } }));
+  await page.goto('/calendar');
+  await expect(page.locator('.open-game-card')).toHaveCount(1);
+  await expect(page.locator('.open-game-card').getByText('Детская группа')).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Месяц', exact: true }).click();
+  await expect(page.locator('.calendar-month-event.calendar-event-children_group').first()).toBeVisible();
+  await page.getByRole('tab', { name: 'Неделя', exact: true }).click();
+  await expect(page.locator('.calendar-event-children_group')).toHaveCount(7);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    const days = page.locator('.calendar-week-grid > .calendar-day');
+    await expect(days).toHaveCount(7);
+    const boxes = await days.evaluateAll(elements => elements.map(el => {
+      const box = el.getBoundingClientRect(); return { x: box.x, y: box.y, bottom: box.bottom, right: box.right };
+    }));
+    for (let index = 1; index < boxes.length; index += 1) {
+      expect(Math.abs(boxes[index].x - boxes[0].x)).toBeLessThan(1);
+      expect(boxes[index].y).toBeGreaterThanOrEqual(boxes[index - 1].bottom - 1);
+    }
+    expect(boxes.every(box => box.x >= 0 && box.right <= width)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.locator('.calendar-week').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `test-results/vertical-week-${width}.png`, animations: 'disabled' });
+  }
+});
