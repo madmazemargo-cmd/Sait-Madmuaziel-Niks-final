@@ -306,8 +306,10 @@ async function masterEvents(env: Env) {
   const events = [];
   for (const row of results) {
     const value = row as Row;
+    const exclusions = await env.DB.prepare('SELECT occurrence_date FROM calendar_event_exclusions WHERE event_id = ? ORDER BY occurrence_date').bind(value.id).all();
     events.push({
       ...value,
+      excludedDates: [...new Set([...legacyExcludedDates(value), ...exclusions.results.map((item) => String(item.occurrence_date)).filter(validDate)])],
       game_type: eventGameType(value.game_type),
       seats: nullableNumber(value.seats),
       archived: Boolean(value.archived),
@@ -634,6 +636,22 @@ async function handle(request: Request, env: Env): Promise<Response> {
     await setEventTags(env.DB, eventId, body.tags);
     await setMiniCapacity(env.DB, eventId, body.miniCapacity);
     return json({ id: eventId }, 201);
+  }
+  const occurrenceMatch = path.match(/^\/api\/master\/events\/([^/]+)\/occurrences\/([^/]+)$/);
+  if (occurrenceMatch && request.method === 'DELETE') {
+    if (await requireCsrf(request, session)) return json({ error: 'Недействительный CSRF-токен.' }, 403);
+    const eventId = decodeURIComponent(occurrenceMatch[1]);
+    const date = decodeURIComponent(occurrenceMatch[2]);
+    if (!validDate(date) || new Date(dateUtc(date)).toISOString().slice(0, 10) !== date) return json({ error: 'Некорректная дата встречи.' }, 400);
+    const current = await env.DB.prepare('SELECT * FROM calendar_events WHERE id = ? AND archived = 0').bind(eventId).first<Row>();
+    if (!current) return json({ error: 'Игра не найдена.' }, 404);
+    if (!current.recurrence || current.recurrence === 'none' || !occursOn(current, date)) return json({ error: 'Эта дата не относится к повторяющейся серии.' }, 400);
+    const timestamp = nowIso();
+    await env.DB.batch([
+      env.DB.prepare('INSERT INTO calendar_event_exclusions (event_id, occurrence_date, created_at) VALUES (?, ?, ?) ON CONFLICT(event_id, occurrence_date) DO NOTHING').bind(eventId, date, timestamp),
+      env.DB.prepare('UPDATE calendar_events SET revision = revision + 1, updated_at = ? WHERE id = ? AND archived = 0').bind(timestamp, eventId),
+    ]);
+    return json({ ok: true, eventId, occurrenceDate: date });
   }
   const match = path.match(/^\/api\/master\/events\/([^/]+)$/);
   if (match && (request.method === 'PATCH' || request.method === 'DELETE')) {

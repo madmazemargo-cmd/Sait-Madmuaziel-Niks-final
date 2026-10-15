@@ -12,7 +12,6 @@
   .master-overlay, .master-editor { animation: none; }
 }
 .master-subheading{margin:34px 0 8px}.master-subheading h2{font:600 32px/.95 var(--app-font-serif);margin:8px 0;color:#f5eddc}
-.master-calendar-grid + .master-events { display: none; }
 .master-funnel { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; margin: 22px 0 30px; padding: 16px 0; border-top: 1px solid #44344a; border-bottom: 1px solid #44344a; color: #a696a9; font: 10px/1.3 var(--app-font-mono); }
 .master-funnel .eyebrow { flex: 0 0 100%; }
 .master-funnel > span:not(.eyebrow) { display: inline-flex; align-items: baseline; gap: 7px; }
@@ -25,3 +24,6 @@
 .master-review-row { align-items: start; }
 .master-review-row > p { max-width: 530px; white-space: pre-line; }
 @media(max-width:680px){.master-funnel{gap:10px 13px}.master-application-meta{justify-items:start;min-width:0}.master-application-meta small{text-align:left}.master-crm-field{width:100%}.master-review-row>p{max-width:none}}
+.master-notice { padding: 12px 16px; border: 1px solid #68812e; color: #d8ff55; background: rgba(216,255,85,.05); font-size: 13px; line-height: 1.6; }
+.master-calendar-help { color: #b5a8b8; font-size: 12px; line-height: 1.6; margin: 12px 0 20px; }
+.master-calendar-event-actions button:disabled, .master-event-actions button:disabled { opacity: .5; cursor: wait; }

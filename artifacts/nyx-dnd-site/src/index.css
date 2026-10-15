@@ -800,8 +800,6 @@
   .master-content:has(.master-view-actions button:first-child.is-active) .master-calendar-day { min-height: 0; }
   .master-content:has(.master-view-actions button:first-child.is-active) .master-calendar-day > div { align-content: start; }
 }
-.master-content:has(.master-view-actions button:first-child.is-active) .master-events { display: none; }
-.master-content:has(.master-view-actions button:nth-child(2).is-active) .master-events { display: grid; }
 
 @media (max-width: 900px) {
   .catalog-game-cover { width: auto; margin-left: 0; }
