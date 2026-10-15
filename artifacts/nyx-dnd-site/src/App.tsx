@@ -227,6 +227,16 @@ function hasOpenSeats(game: Game) {
   return game.status === 'available' && game.seats !== null && game.seats > 0;
 }
 
+// Occurrences arrive in date order; keep the nearest meeting of each series.
+function firstMeetingPerSeries(games: Game[]) {
+  const seen = new Set<string>();
+  return games.filter((game) => {
+    if (seen.has(game.eventId)) return false;
+    seen.add(game.eventId);
+    return true;
+  });
+}
+
 function matchesFormat(game: Game, format: string) {
   return format === 'all' || game.format === format;
 }
@@ -683,7 +693,7 @@ function eventStructuredData(game: Game) {
 function NextGameSection({ system, format }: { system?: string; format?: 'online' | 'offline' }) {
   const { games, isLoading, isError, refetch } = useLiveGames();
   const [selectedFormat, setSelectedFormat] = useState(format ?? 'all');
-  const openGames = games.filter((game) => hasOpenSeats(game) && matchesFormat(game, selectedFormat) && (!system || normalizeSystemKey(game.system) === system)).slice(0, 3);
+  const openGames = firstMeetingPerSeries(games.filter((game) => hasOpenSeats(game) && matchesFormat(game, selectedFormat) && (!system || normalizeSystemKey(game.system) === system))).slice(0, 3);
   return <section className="section open-games" id="open-games" aria-labelledby="next-game-title">
     <div className="section-head"><div><span className="catalog-kicker">ОТКРЫТЫЕ НАБОРЫ</span><h2 id="next-game-title">Ближайшие игры</h2></div><p className="section-intro">Выберите встречу со свободными местами. Всё время указано по Москве. <Link href={`/calendar?format=${selectedFormat}`}>Все даты в календаре →</Link></p></div>
     {!format && <div className="catalog-kind-filters" role="group" aria-label="Формат ближайших игр">{[['all','Все'],['offline','Очно в Москве'],['online','Онлайн']].map(([value,label]) => <button type="button" key={value} className={selectedFormat === value ? 'is-active' : ''} onClick={() => setSelectedFormat(value)}>{label}</button>)}</div>}
@@ -835,7 +845,7 @@ function CalendarPage({ initialView = 'list' }: { initialView?: CalendarView }) 
     const beginnerMatches = !beginnersOnly || /нович|любой|начин/.test(experience);
     return !calendarOnlyStatuses.has(game.status) && formatMatches && storyMatches && beginnerMatches;
   });
-  const openGames = filterGames(upcomingGames).filter(hasOpenSeats);
+  const openGames = firstMeetingPerSeries(filterGames(upcomingGames).filter(hasOpenSeats));
   const monthStartDate = monthGridStart(monthStart);
   const monthEndDate = monthGridEnd(monthStart);
   const monthGames = useMemo(() => filterGames(expandEvents(events, monthStartDate, monthEndDate)), [beginnersOnly, events, formatFilter, monthEndDate, monthStartDate, storyFilter]);

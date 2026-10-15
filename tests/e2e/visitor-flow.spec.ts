@@ -72,6 +72,33 @@ test('list excludes service days and closed games; month remains available', asy
   await expect(page.getByText('Служебный выходной', { exact: true })).toHaveCount(0);
 });
 
+test('recurring games have one signup card per series, while month retains every meeting', async ({ page }) => {
+  const shiftedDate = (days: number) => {
+    const value = new Date(`${date}T12:00:00Z`);
+    value.setUTCDate(value.getUTCDate() + days);
+    return value.toISOString().slice(0, 10);
+  };
+  const nextDate = shiftedDate(7);
+  await page.route('**/api/calendar', route => route.fulfill({ json: { events: [
+    { ...event, recurrence: 'weekly', eventDate: shiftedDate(-28), excludedDates: [date] },
+    // Separate tables with the same title must not be merged into one series.
+    { ...event, id: 'independent-table' },
+    { ...event, id: 'another-game', title: 'Другая история' },
+  ] } }));
+  for (const path of ['/', '/calendar']) {
+    await page.goto(path);
+    const series = page.locator('[data-testid^="open-game-visitor-offline:"]');
+    await expect(series).toHaveCount(1);
+    await expect(series.getByRole('link', { name: 'Записаться', exact: true }))
+      .toHaveAttribute('href', `/anketa?event=${event.id}&date=${nextDate}`);
+    await expect(page.locator('.open-game-card')).toHaveCount(3);
+    await expect(page.getByRole('heading', { name: event.title, exact: true })).toHaveCount(2);
+  }
+  await page.getByRole('tab', { name: 'Месяц', exact: true }).click();
+  await expect(page.getByRole('grid')).toBeVisible();
+  expect(await page.locator('.calendar-month-event').filter({ hasText: event.title }).count()).toBeGreaterThan(2);
+});
+
 test('desktop grid aligns prices; mobile stays within viewport', async ({ page }) => {
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
